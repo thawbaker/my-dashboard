@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { getAccessibleApps, getUserByEmail, listUsers } from '@/lib/db';
+import { getAccessibleApps, getBlockedAppIds, getUserByEmail, listUsers } from '@/lib/db';
 import { signUpAdminUserSchema } from '@/lib/validations';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { hashPassword } from '@/lib/auth';
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     disabled: u.disabled === 1,
     createdAt: u.created_at,
     appCount: getAccessibleApps(u.id).length,
+    blockedAppIds: getBlockedAppIds(u.id),
   }));
 
   return NextResponse.json({ users }, { status: 200, headers: corsHeaders(request) });
