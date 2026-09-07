@@ -15,7 +15,7 @@ export async function GET() {
   }
   
   // Get fresh user data from database
-  const user = await getUserById(session.id as string);
+  const user = getUserById(Number(session.id));
   
   if (!user) {
     return NextResponse.json(

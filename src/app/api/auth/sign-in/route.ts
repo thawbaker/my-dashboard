@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Verify password
-    const isValidPassword = await comparePasswords(password, user.password);
+    const isValidPassword = await comparePasswords(password, user.password_hash);
     if (!isValidPassword) {
       return NextResponse.json(
         { 

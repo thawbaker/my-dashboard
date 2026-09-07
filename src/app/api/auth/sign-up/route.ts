@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     
     // Hash password and create user
     const hashedPassword = await hashPassword(password);
-    const user = await createUser(email, hashedPassword, name);
+    const user = createUser({ email, passwordHash: hashedPassword, name });
     
     // Create JWT token
     const token = await createToken({
