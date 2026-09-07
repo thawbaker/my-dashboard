@@ -1,0 +1,14 @@
+Build a nextjs patterned after this repo
+https://github.com/nidal1111/auth-next-my-app
+
+use sqlite3, no ORM
+use shadcn 
+jwt + cors
+after login user page will have icon application launcher placeholders
+on the user landing  page, admins will have have an admin icon that will take them to
+the admin page
+the admin page will have a couple of placeholder icons
+the idea is thjat the admin area will have icons relating to admin functions
+for their conterpart applications launch icons
+the auth system shold have a flag to allow disabling a user or admin
+per user permissions will control access to applications
