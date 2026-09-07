@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:init": "node scripts/init-db.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "setup": "npm run db:init && npm run db:seed"
   },
   "dependencies": {
     "@next/env": "^15.5.25",
