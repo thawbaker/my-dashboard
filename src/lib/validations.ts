@@ -26,5 +26,41 @@ export const signInSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+// Admin-provisioned account (role may be set; public sign-up is always 'user')
+export const signUpAdminUserSchema = z.object({
+  name: nameSchema,
+  email: emailSchema,
+  password: passwordSchema,
+  role: z.enum(['user', 'admin']),
+});
+
+export const appSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  url: z.string().min(1, 'URL is required').default('#'),
+  icon: z.string().min(1, 'Icon is required').default('layout-grid'),
+});
+
+// Partial update — no defaults, so unspecified fields are left untouched
+export const updateAppSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  url: z.string().min(1, 'URL is required').optional(),
+  icon: z.string().min(1, 'Icon is required').optional(),
+  enabled: z.boolean().optional(),
+});
+
+// Denylist: app ids the user CANNOT access
+export const permissionsSchema = z.object({
+  blockedAppIds: z.array(z.number().int().positive()),
+});
+
+export const toggleDisabledSchema = z.object({
+  disabled: z.boolean(),
+});
+
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
+export type SignUpAdminUserInput = z.infer<typeof signUpAdminUserSchema>;
+export type AppInput = z.infer<typeof appSchema>;
+export type UpdateAppInput = z.infer<typeof updateAppSchema>;
+export type PermissionsInput = z.infer<typeof permissionsSchema>;
+export type ToggleDisabledInput = z.infer<typeof toggleDisabledSchema>;

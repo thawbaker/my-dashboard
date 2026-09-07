@@ -123,13 +123,17 @@ export function createApp(input: { name: string; slug: string; icon?: string; ur
 
 export function updateApp(
   id: number,
-  patch: { name?: string; icon?: string; url?: string; enabled?: boolean }
+  patch: { name?: string; slug?: string; icon?: string; url?: string; enabled?: boolean }
 ): App | null {
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
   if (patch.name !== undefined) {
     sets.push(`name = @name`);
     params.name = patch.name;
+  }
+  if (patch.slug !== undefined) {
+    sets.push(`slug = @slug`);
+    params.slug = patch.slug;
   }
   if (patch.icon !== undefined) {
     sets.push(`icon = @icon`);

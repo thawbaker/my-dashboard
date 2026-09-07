@@ -75,6 +75,8 @@ export default function SignInPage() {
       if (!res.ok) {
         if (data.errorType === 'email_not_found') {
           setServerError('No account found with this email address. Please check your email or sign up.');
+        } else if (data.errorType === 'disabled') {
+          setServerError('This account has been disabled. Please contact an administrator.');
         } else if (data.errorType === 'invalid_password') {
           setServerError('Incorrect password. Please try again.');
         } else {

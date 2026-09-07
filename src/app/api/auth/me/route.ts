@@ -1,34 +1,32 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
-import { getUserById } from '@/lib/db';
+import type { NextRequest } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
+import { getAccessibleApps } from '@/lib/db';
+import { corsHeaders, preflightResponse } from '@/lib/cors';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
-  const session = await getSession();
-  
-  if (!session) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
-  }
-  
-  // Get fresh user data from database
-  const user = getUserById(Number(session.id));
-  
+export async function OPTIONS(request: NextRequest) {
+  return preflightResponse(request);
+}
+
+export async function GET(request: NextRequest) {
+  // getSessionUser re-checks the DB: deleted or disabled users get 401,
+  // which kills live sessions and sends the client back to /sign-in.
+  const user = await getSessionUser();
+
   if (!user) {
     return NextResponse.json(
-      { error: 'User not found' },
-      { status: 404 }
+      { error: 'Unauthorized' },
+      { status: 401, headers: corsHeaders(request) }
     );
   }
-  
-  return NextResponse.json({
-    user: {
-      id: user.id.toString(),
-      email: user.email,
-      name: user.name
-    }
-  });
+
+  return NextResponse.json(
+    {
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      apps: getAccessibleApps(user.id),
+    },
+    { status: 200, headers: corsHeaders(request) }
+  );
 }
