@@ -1,261 +1,155 @@
-# Next.js Authentication App
+# my-dashboard
 
-A complete authentication application built with Next.js 15, TypeScript, and SQLite, implementing a secure registration and login system with JWT tokens.
+An app-launcher dashboard with authentication. Built with Next.js 15 (App
+Router), TypeScript, better-sqlite3 (raw SQL, no ORM), and shadcn/ui.
+Users sign up or are provisioned by an admin, then see a launcher grid of
+applications. Admins manage users and apps; access control is a **denylist**
+— every enabled app is granted to every user, and admins block apps per
+user as needed.
 
-## 🚀 Key Features
+## Tech stack
 
-- **Complete Authentication**: User registration and login system with email/password
-- **Advanced Security**: 
-  - Password hashing with bcrypt
-  - JWT tokens with 24h expiration
-  - HTTP-only cookies for session management
-- **Route Protection**: Custom middleware to protect private areas
-- **Form Validation**: Schema validation with Zod
-- **Modern UI**: Custom components based on Radix UI and Tailwind CSS
-- **Local Database**: SQLite with Drizzle ORM for simple setup
+- **Framework**: Next.js 15.5 (App Router, Turbopack dev)
+- **Language**: TypeScript
+- **Database**: SQLite via `better-sqlite3`, raw SQL — `db/schema.sql` is the contract
+- **Auth**: JWT (jose, 24 h) in an HTTP-only `auth-token` cookie; bcryptjs password hashing
+- **Validation**: zod
+- **UI**: Tailwind CSS v3 + shadcn/ui (new-york style, zinc, class-based dark mode)
 
-## 🛠️ Tech Stack
-
-- **Framework**: [Next.js 15.1.8](https://nextjs.org/) with App Router
-- **Language**: [TypeScript](https://www.typescriptlang.org/)
-- **Database**: SQLite with [Drizzle ORM](https://orm.drizzle.team/)
-- **Authentication**: JWT ([jose](https://github.com/panva/jose)) + bcryptjs
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **UI Components**: [Radix UI](https://www.radix-ui.com/) + custom components
-- **Validation**: [Zod](https://zod.dev/)
-
-## 📁 Project Structure
-
-```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/auth/          # Authentication API routes
-│   ├── dashboard/         # Protected area
-│   ├── sign-in/          # Login page
-│   └── sign-up/          # Registration page
-├── components/            # Reusable UI components
-│   └── ui/               # Base components (Button, Input, etc.)
-├── lib/                   # Utilities and core logic
-│   ├── auth.ts           # Authentication logic
-│   ├── db/               # Database schema and connection
-│   ├── utils.ts          # Utility functions
-│   └── validations.ts    # Zod validation schemas
-└── middleware.ts          # Route protection
-```
-
-## 🚀 Installation and Setup
+## Getting started
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm, yarn, pnpm, or bun
+- Node.js 18+ (20+ recommended)
+- `sqlite3` CLI (optional, for poking at the DB)
 
-### Steps
+### Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/nidal1111/auth-next-my-app.git
-   cd auth-next-my-app
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   # or
-   yarn install
-   # or
-   pnpm install
-   ```
-
-3. **Configure environment variables**
-   ```bash
-   cp .env.local.example .env.local
-   ```
-   
-   Generate a secure JWT secret:
-   ```bash
-   openssl rand -base64 32
-   ```
-   
-   Paste the generated value in `.env.local`:
-   ```
-   JWT_SECRET=your_generated_secret
-   ```
-
-4. **Initialize the database**
-   ```bash
-   npm run db:push
-   ```
-
-5. **Start the development server**
-   ```bash
-   npm run dev
-   ```
-
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## 🔧 Available Scripts
-
-- `npm run dev` - Start development server with Turbopack
-- `npm run build` - Create production build
-- `npm run start` - Start production server
-- `npm run lint` - Run code linting
-- `npm run db:push` - Sync database schema
-- `npm run db:studio` - Open Drizzle Studio to explore the DB
-
-## 🔐 Security Architecture
-
-### Authentication Flow
-
-1. **Registration**:
-   - User enters email, password, and name
-   - Password is hashed with bcrypt (10 rounds)
-   - User is saved to database
-   - JWT token is generated and stored in HTTP-only cookie
-
-2. **Login**:
-   - Credentials verified against database
-   - Password comparison with bcrypt
-   - JWT token generation with 24h expiration
-   - HTTP-only cookie for session
-
-3. **Route Protection**:
-   - Middleware intercepts requests to `/dashboard`
-   - Verifies JWT token validity
-   - Automatic redirects for unauthenticated users
-
-### Design Decisions
-
-- **JWT over server sessions**: Scalability and statelessness
-- **HTTP-only cookies**: Protection from XSS attacks
-- **SQLite**: Simplicity for development/small apps
-- **Drizzle ORM**: Type-safety and performance
-- **Edge Middleware**: Fast token verification at edge level
-
-## 🎨 UI Components
-
-UI components follow the composition pattern with variants managed by CVA (class-variance-authority):
-
-- **Button**: Supports variants (default, destructive, outline, etc.) and sizes
-- **Input**: Input field with error state support
-- **PasswordInput**: Password input with visibility toggle
-- **Label**: Accessible labels for forms
-
-## 📝 API Endpoints
-
-### POST `/api/auth/sign-up`
-Register a new user.
-
-**Body**:
-```json
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "name": "John Doe"
-}
+```bash
+npm install
+cp .env.local.example .env.local
+# edit .env.local:
+#   JWT_SECRET   →  openssl rand -base64 32
+#   ADMIN_EMAIL / ADMIN_PASSWORD → first-run admin
+npm run setup
+npm run dev   # http://localhost:3000
 ```
 
-### POST `/api/auth/sign-in`
-Authenticate an existing user.
+`npm run setup` runs `db:init` (applies `db/schema.sql`, idempotent) then
+`db:seed` (creates the admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` **if no
+admin exists**, and inserts the Projects / Analytics / Reports placeholder
+apps **if no apps exist**).
 
-**Body**:
-```json
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
+Sign in at `/sign-in` with the admin credentials. Public sign-up at
+`/sign-up` always creates `role: user` accounts, which start with access to
+all enabled apps.
+
+## Scripts
+
+| Script            | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| `npm run dev`     | Dev server (Turbopack)                               |
+| `npm run build`   | Production build                                     |
+| `npm run start`   | Serve the production build                           |
+| `npm run lint`    | ESLint                                               |
+| `npm run db:init` | Create tables from `db/schema.sql` (idempotent)      |
+| `npm run db:seed` | Seed first admin + placeholder apps (no-op if exist) |
+| `npm run setup`   | `db:init && db:seed`                                 |
+
+## API
+
+All routes run on the `nodejs` runtime, validate with zod, and return
+`{ error, errorType?, errors? }` on failure.
+
+### Auth
+
+| Method | Path              | Description                                                        |
+| ------ | ----------------- | ------------------------------------------------------------------ |
+| POST   | `/api/auth/sign-up` | Public registration → `role: user`, auto sign-in (cookie)        |
+| POST   | `/api/auth/sign-in` | Sign in. Disabled account → `403 { errorType: 'disabled' }`      |
+| POST   | `/api/auth/logout`  | Clear the session cookie                                          |
+| GET    | `/api/auth/me`      | `{ user, apps }` — apps the user can access (enabled − denylist) |
+
+### Admin
+
+All admin routes re-check the DB on every call (role **and** disabled
+status — demotions and disables apply immediately).
+
+| Method | Path                                | Description                                                        |
+| ------ | ----------------------------------- | ------------------------------------------------------------------ |
+| GET    | `/api/admin/users`                  | All users, each with `appCount` and `blockedAppIds`                |
+| POST   | `/api/admin/users`                  | Create user `{ name, email, password, role }`                      |
+| PATCH  | `/api/admin/users/:id`              | `{ disabled }` — `409` on self-disable or last active admin        |
+| PUT    | `/api/admin/users/:id/permissions`  | `{ blockedAppIds: number[] }` — replaces the user's denylist       |
+| GET    | `/api/admin/apps`                   | All apps (including disabled)                                      |
+| POST   | `/api/admin/apps`                   | Create app `{ name, url, icon }` — slug auto-kebab-cased, `409` on dup |
+| PATCH  | `/api/admin/apps/:id`               | `{ name?, url?, icon?, enabled? }` — renaming recomputes the slug  |
+
+## Design decisions
+
+### Permissions: denylist (default-allow)
+
+A row in `user_applications` means the user **cannot** access that app.
+Accessible apps = enabled apps minus the user's denylist rows. Consequences:
+
+- New apps are auto-granted to every user — no permission seeding.
+- New users need no permission rows at all.
+- "Restore default access" is just deleting rows.
+
+### Disable semantics (live-session kill)
+
+`users.disabled` blocks both new sign-ins and live sessions:
+
+- Sign-in for a disabled account → `403 { errorType: 'disabled' }`, checked
+  before the password comparison.
+- Every authenticated API request re-checks the DB
+  (`getSessionUser()` → `getUserById` → `null` when missing or disabled).
+  That re-check — not the 24 h JWT — is what revokes live sessions
+  immediately.
+- Guards: an admin cannot disable their own account; the last active admin
+  cannot be disabled. Both return `409`.
+
+### Edge vs Node split of auth checks
+
+- `src/middleware.ts` runs at the edge (no DB access) and gates on the JWT
+  only: `/dashboard*` requires a valid token; `/admin*` additionally requires
+  `payload.role === 'admin'` (which is why `role` is embedded in the token);
+  `/sign-in` and `/sign-up` redirect authenticated visitors to `/dashboard`.
+- API routes are authoritative: they re-check the DB on every request, so a
+  demotion/disable takes effect immediately. The edge gate is only a fast
+  redirect for page navigation.
+
+### CORS
+
+Same-origin by default — no CORS headers are emitted. When `ALLOWED_ORIGINS`
+(comma list) is set, matching origins get
+`Access-Control-Allow-Origin: <origin>` + `Access-Control-Allow-Credentials:
+true` + `Vary: Origin`, and every API route answers OPTIONS preflights with
+`204`.
+
+### Storage
+
+SQLite via better-sqlite3 (WAL mode, `PRAGMA foreign_keys=ON`), single file
+at `DATABASE_PATH` (default `./data/dashboard.db`, gitignored). The schema
+lives in plain SQL (`db/schema.sql`) — no ORM and no migration tool;
+`db:init` runs the file idempotently (`CREATE ... IF NOT EXISTS`).
+
+## Project structure
+
 ```
-
-### POST `/api/auth/logout`
-Terminate the current session.
-
-### GET `/api/auth/me`
-Get authenticated user information.
-
-## 🧪 Testing
-
-To test the application:
-
-1. Register a new account from `/sign-up` page
-2. Login with created credentials
-3. Verify access to protected dashboard
-4. Test logout and route protection
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-
-**Important**: This app uses SQLite locally but requires Postgres on Vercel since SQLite doesn't work in serverless environments.
-
-1. **Push code to GitHub**
-
-2. **Import project on [Vercel](https://vercel.com)**
-
-3. **Set up Database** (Required - Choose one):
-   
-   **Option A: Vercel Postgres**
-   - Go to your Vercel project dashboard
-   - Navigate to "Storage" tab
-   - Click "Create Database" → Select "Postgres"
-   - Choose a database name and region
-   
-   **Option B: Supabase** (Alternative)
-   - Go to your Vercel project dashboard
-   - Navigate to "Storage" tab
-   - Click "Create Database" → Select "Supabase"
-   - This automatically adds all required `POSTGRES_*` environment variables
-
-4. **Add environment variables**:
-   - Go to Settings → Environment Variables
-   - Add `JWT_SECRET`:
-     ```bash
-     # Generate a secure secret locally:
-     openssl rand -base64 32
-     ```
-   - Paste the generated value as `JWT_SECRET`
-
-5. **Deploy the project**:
-   - Vercel will automatically deploy your project
-   - The API routes include `export const runtime = 'nodejs'` for compatibility
-
-6. **Initialize the database** (after first deployment):
-   ```bash
-   # Install Vercel CLI if needed
-   npm i -g vercel
-   
-   # Link to your project
-   vercel link
-   
-   # Pull environment variables
-   vercel env pull .env.local
-   
-   # Run production migration
-   npm run db:push:prod
-   ```
-
-**Troubleshooting**:
-- If you get 405 errors, ensure Vercel Postgres is set up
-- Check that all `POSTGRES_*` variables are present in your Vercel dashboard
-- Verify `JWT_SECRET` is set in environment variables
-
-### Self-hosting
-
-1. Build the project:
-   ```bash
-   npm run build
-   ```
-
-2. Configure environment variables in production
-
-3. Start the server:
-   ```bash
-   npm run start
-   ```
-
-## 🤝 Contributing
-
-1. Fork the project
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+db/schema.sql                # plain-SQL schema contract
+scripts/init-db.mjs          # applies the schema (idempotent)
+scripts/seed.mjs             # first-run admin + placeholder apps
+src/lib/db.ts                # raw better-sqlite3 helpers (users, apps, denylist)
+src/lib/auth.ts              # JWT, cookie session, getSessionUser, requireAdmin
+src/lib/cors.ts              # same-origin default / ALLOWED_ORIGINS preflight
+src/lib/validations.ts       # zod schemas
+src/middleware.ts            # edge gate (JWT only): /dashboard, /admin, sign-in/up
+src/components/ui/           # shadcn/ui primitives
+src/components/admin-shell.tsx  # shared chrome for /admin* pages
+src/components/app-icon.tsx     # fixed lucide icon set + fallback
+src/app/dashboard/           # user launcher grid (+ Admin tile for admins)
+src/app/admin/               # function launcher, user mgmt, app mgmt
+src/app/api/auth/            # sign-up, sign-in, logout, me
+src/app/api/admin/{users,apps}/  # admin API (7 routes)
+```

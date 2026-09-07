@@ -29,6 +29,12 @@ if (adminCount === 0) {
     );
     process.exit(1);
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    console.error(
+      `ADMIN_EMAIL (${email}) is not a valid email address — sign-in validates emails, so such an account could never log in. Use e.g. admin@example.com.`
+    );
+    process.exit(1);
+  }
 
   const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(email);
   const passwordHash = await bcrypt.hash(password, 10);

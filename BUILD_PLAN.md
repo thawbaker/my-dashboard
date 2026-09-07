@@ -198,19 +198,22 @@ Grid of 4 cards (same card style as user launcher):
 2. `README.md` rewrite: setup (`npm i && npm run setup && npm run dev`), scripts, API table, design decisions (denylist model, disable semantics + why DB re-check, CORS policy, edge-vs-node split of auth checks).
 3. Commit per phase as we go; final tag `v0.1.0`.
 
-### Manual verification checklist (the test suite)
-- [ ] Fresh clone → `npm i && npm run setup && npm run dev` boots; DB + admin + 3 apps seeded
-- [ ] Public sign-up → auto sign-in → launcher shows 3 tiles, **no** admin tile
-- [ ] Seeded admin login → 3 tiles **+ Admin** tile → `/admin` shows 4 function tiles (Settings/Audit → "coming soon" toast)
-- [ ] Admin creates a user (role user) → that user can sign in
-- [ ] Admin unchecks an app for a user → tile disappears from that user's launcher immediately; re-checking restores it
-- [ ] Admin creates a 4th app → appears for **all** users incl. existing ones (auto-grant)
-- [ ] Admin disables an app → hidden from every launcher
-- [ ] Admin disables a user → user's open tab: next action (e.g. refresh/`/me`) bounces to sign-in; login attempt → "account disabled" (403)
-- [ ] Guard: admin disabling self → 409 toast; disabling the only active admin → 409 toast
-- [ ] Logout → cookie gone, `/dashboard` redirects to sign-in
-- [ ] CORS: with `ALLOWED_ORIGINS` unset, cross-origin fetch gets no `Access-Control-Allow-Origin`; with it set, preflight passes and cookie auth works from that origin
-- [ ] `npm run build` clean; `npm start` (prod) repeats key flows
+### Manual verification checklist (the test suite) — **passed 2026-09-07**
+
+Verified against the **production** build (`npm run build` + `npm start`) via the API contract + edge middleware; UI confirmed by clean build, served pages, and client-side render logic. One fix found during verification: `db:seed` now rejects `ADMIN_EMAIL` values that sign-in validation would reject (an unusable admin could otherwise be seeded, e.g. `admin@localhost`).
+
+- [x] Fresh clone → `npm i && npm run setup && npm run dev` boots; DB + admin + 3 apps seeded (re-run against deleted DB)
+- [x] Public sign-up → auto sign-in → launcher shows 3 tiles, **no** admin tile (`role:user`, 3 apps from `/me`)
+- [x] Seeded admin login → 3 tiles **+ Admin** tile → `/admin` shows 4 function tiles (Settings/Audit → "coming soon" toast)
+- [x] Admin creates a user (role user) → that user can sign in
+- [x] Admin unchecks an app for a user → tile disappears from that user's launcher immediately (3→2); re-checking restores (2→3)
+- [x] Admin creates a 4th app → appears for **all** users incl. existing ones (auto-grant)
+- [x] Admin disables an app → hidden from every launcher (incl. admin's own `/me`)
+- [x] Admin disables a user → user's live session 401 on next `/me`; login attempt → 403 `disabled`; re-enable restores
+- [x] Guard: admin disabling self → 409 (hit live); disabling the only active admin → 409 is defense-in-depth (logically unreachable — an actor disabling another *active* admin implies ≥2 active admins) and is code-reviewed
+- [x] Logout → cookie gone, `/dashboard` redirects to sign-in (307; also no-cookie → /sign-in, non-admin → /admin → /sign-in, non-admin → admin API → 403)
+- [x] CORS: with `ALLOWED_ORIGINS` unset, cross-origin fetch + preflight get no `Access-Control-Allow-Origin`; with it set, origin echoed + `Allow-Credentials: true`, preflight 204, cookie set from that origin; foreign origin → `Vary: Origin` only
+- [x] `npm run build` clean (17 routes + middleware, 0 lint warnings); `npm start` (prod) repeats key flows
 
 ## File map (end state, deltas vs reference)
 
