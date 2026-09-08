@@ -83,7 +83,9 @@ status — demotions and disables apply immediately).
 | ------ | ----------------------------------- | ------------------------------------------------------------------ |
 | GET    | `/api/admin/users`                  | All users, each with `appCount` and `blockedAppIds`                |
 | POST   | `/api/admin/users`                  | Create user `{ name, username, email, password, role }` — `409 { errorType: 'username_taken' }` on conflict |
-| PATCH  | `/api/admin/users/:id`              | `{ disabled }` — `409` on self-disable or last active admin        |
+| PATCH  | `/api/admin/users/:id`              | Edit user `{ name?, username?, email?, role?, disabled? }` (never the password) — `409` on self-disable, self-demote, last active admin, or username/email conflict. Renaming the username moves their personal data file |
+| DELETE | `/api/admin/users/:id`              | Delete user, their permission rows, and their personal DB — `409` on self or last active admin |
+| POST   | `/api/admin/users/:id/password`     | `{ password }` — set the user's password to a specified value (same policy as sign-up) |
 | PUT    | `/api/admin/users/:id/permissions`  | `{ blockedAppIds: number[] }` — replaces the user's denylist       |
 | GET    | `/api/admin/apps`                   | All apps (including disabled), each with `adminOnly`                |
 | POST   | `/api/admin/apps`                   | Create app `{ name, url, icon, adminOnly? }` — slug auto-kebab-cased, `409` on dup |
@@ -120,9 +122,31 @@ Consequences:
 - Every authenticated API request re-checks the DB
   (`getSessionUser()` → `getUserById` → `null` when missing or disabled).
   That re-check — not the 24 h JWT — is what revokes live sessions
-  immediately.
-- Guards: an admin cannot disable their own account; the last active admin
-  cannot be disabled. Both return `409`.
+  immediately. It is also what makes a **deleted** user's live sessions die
+  instantly (the `getUserById` lookup returns null for a gone row).
+- Guards: an admin cannot disable or demote their own account, and the last
+  active admin cannot be disabled or demoted. Deletion is guarded the same
+  way: an admin cannot delete themselves, and the last active admin cannot
+  be deleted. All return `409`.
+
+### Editing, deleting, and setting passwords
+
+- **Edit** (`PATCH /api/admin/users/:id`) updates `name`, `username`,
+  `email`, `role`, and/or `disabled` — never the password. Username and
+  email are checked for uniqueness against *other* users (`409` on
+  `username_taken` / `email_taken`). Changing the username moves the user's
+  personal data file `user-data/<username>.db` to the new name so their apps
+  keep working (best-effort; skipped if the target name already exists).
+- **Delete** (`DELETE /api/admin/users/:id`) removes the user. Their
+  `user_applications` rows cascade (foreign keys), and their personal DB
+  file is removed. Live sessions are killed immediately by the per-request
+  DB re-check.
+- **Set password** (`POST /api/admin/users/:id/password`) overwrites a user's
+  password with a specified value, validated by the same policy as sign-up
+  and hashed with bcrypt. It works for any account, including the admin's
+  own (there is no self-service password-change flow). Existing live
+  sessions are **kept** — the JWT is id-based, not password-based — so the
+  new password takes effect at the user's next sign-in.
 
 ### Edge vs Node split of auth checks
 
@@ -194,5 +218,5 @@ src/components/app-icon.tsx     # fixed lucide icon set + fallback
 src/app/dashboard/           # user launcher grid (+ Admin tile for admins)
 src/app/admin/               # function launcher, user mgmt, app mgmt
 src/app/api/auth/            # sign-up, sign-in, logout, me
-src/app/api/admin/{users,apps}/  # admin API (7 routes)
+src/app/api/admin/{users,apps}/  # admin API (9 routes)
 ```

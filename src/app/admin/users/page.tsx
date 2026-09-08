@@ -75,6 +75,20 @@ const emptyCreateForm: CreateForm = {
   role: 'user',
 };
 
+interface EditForm {
+  name: string;
+  username: string;
+  email: string;
+  role: Role;
+}
+
+const emptyEditForm: EditForm = {
+  name: '',
+  username: '',
+  email: '',
+  role: 'user',
+};
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [apps, setApps] = useState<ManagedApp[]>([]);
@@ -88,6 +102,17 @@ export default function AdminUsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>({ ...emptyCreateForm });
   const [creating, setCreating] = useState(false);
+
+  const [editUser, setEditUser] = useState<ManagedUser | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ ...emptyEditForm });
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [pwUser, setPwUser] = useState<ManagedUser | null>(null);
+  const [pwForm, setPwForm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -235,6 +260,106 @@ export default function AdminUsersPage() {
     }
   };
 
+  const openEdit = (user: ManagedUser) => {
+    setEditUser(user);
+    setEditForm({
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+    });
+  };
+
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editUser) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${editUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 400 && Array.isArray(data.errors)) {
+          toast.error(
+            data.errors.map((err: { message: string }) => err.message).join(' ')
+          );
+        } else {
+          toast.error(data.error ?? 'Failed to update user');
+        }
+        return;
+      }
+      // Replace the row with the server's copy (username rename, role, etc.)
+      setUsers((prev) => prev.map((u) => (u.id === editUser.id ? data.user : u)));
+      toast.success(`User ${data.user?.name ?? editUser.name} updated`);
+      setEditUser(null);
+    } catch {
+      toast.error('Failed to update user');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const openSetPassword = (user: ManagedUser) => {
+    setPwUser(user);
+    setPwForm('');
+  };
+
+  const handleSetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pwUser) return;
+    setPwSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${pwUser.id}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwForm }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 400 && Array.isArray(data.errors)) {
+          toast.error(
+            data.errors.map((err: { message: string }) => err.message).join(' ')
+          );
+        } else {
+          toast.error(data.error ?? 'Failed to set password');
+        }
+        return;
+      }
+      toast.success(`Password updated for ${pwUser.name}`);
+      setPwUser(null);
+      setPwForm('');
+    } catch {
+      toast.error('Failed to set password');
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? 'Failed to delete user');
+        return;
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      toast.success(`User ${deleteTarget.name} deleted`);
+      setDeleteTarget(null);
+    } catch {
+      toast.error('Failed to delete user');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const enabledApps = apps.filter((a) => a.enabled);
 
   if (loading) {
@@ -307,13 +432,36 @@ export default function AdminUsersPage() {
                 </TableCell>
                 <TableCell>{user.appCount}</TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openPerms(user)}
-                  >
-                    Permissions
-                  </Button>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPerms(user)}
+                    >
+                      Permissions
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(user)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openSetPassword(user)}
+                    >
+                      Password
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setDeleteTarget(user)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -468,6 +616,182 @@ export default function AdminUsersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit user */}
+      <Dialog
+        open={editUser !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditUser(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit user</DialogTitle>
+            <DialogDescription>
+              Update {editUser?.name}&apos;s profile. Passwords are changed
+              separately via the Password button.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEdit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, name: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-username">Username</Label>
+              <Input
+                id="edit-username"
+                value={editForm.username}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, username: e.target.value }))
+                }
+                required
+                placeholder="johndoe"
+              />
+              <p className="text-xs text-muted-foreground">
+                Renaming moves this user&apos;s personal data file to the new
+                name automatically.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, email: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Role</Label>
+              <Select
+                value={editForm.role}
+                onValueChange={(role) =>
+                  setEditForm((f) => ({ ...f, role: role as Role }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">user</SelectItem>
+                  <SelectItem value="admin">admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditUser(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editSaving}>
+                {editSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set password */}
+      <Dialog
+        open={pwUser !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPwUser(null);
+            setPwForm('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set password</DialogTitle>
+            <DialogDescription>
+              Set {pwUser?.name}&apos;s password to a new value. Existing live
+              sessions are kept; the new password takes effect at their next
+              sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSetPassword} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pw-password">New password</Label>
+              <PasswordInput
+                id="pw-password"
+                value={pwForm}
+                onChange={(e) => setPwForm(e.target.value)}
+                required
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum 6 characters with at least one uppercase letter and one
+                special character.
+              </p>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setPwUser(null);
+                  setPwForm('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pwSaving}>
+                {pwSaving ? 'Saving…' : 'Set password'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete user */}
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete user</DialogTitle>
+            <DialogDescription>
+              Permanently delete {deleteTarget?.name}&apos;s account, their app
+              permissions, and their personal data file. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AdminShell>

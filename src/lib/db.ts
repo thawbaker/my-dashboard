@@ -147,6 +147,65 @@ export function setUserDisabled(id: number, disabled: boolean): void {
     .run(disabled ? 1 : 0, id);
 }
 
+/**
+ * Partial update of a user's editable fields (never the password — use
+ * setUserPassword for that). Unspecified fields are left untouched; the
+ * call is a no-op when the patch is empty. Uniqueness (username/email) and
+ * the self/last-admin guards are enforced by the API layer.
+ */
+export function updateUser(
+  id: number,
+  patch: {
+    name?: string;
+    username?: string;
+    email?: string;
+    role?: Role;
+    disabled?: boolean;
+  }
+): User | null {
+  const sets: string[] = [];
+  const params: Record<string, unknown> = { id };
+  if (patch.name !== undefined) {
+    sets.push(`name = @name`);
+    params.name = patch.name;
+  }
+  if (patch.username !== undefined) {
+    sets.push(`username = @username`);
+    params.username = patch.username;
+  }
+  if (patch.email !== undefined) {
+    sets.push(`email = @email`);
+    params.email = patch.email;
+  }
+  if (patch.role !== undefined) {
+    sets.push(`role = @role`);
+    params.role = patch.role;
+  }
+  if (patch.disabled !== undefined) {
+    sets.push(`disabled = @disabled`);
+    params.disabled = patch.disabled ? 1 : 0;
+  }
+  if (sets.length > 0) {
+    getDb().prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  }
+  return getUserById(id);
+}
+
+export function setUserPassword(id: number, passwordHash: string): void {
+  getDb()
+    .prepare(`UPDATE users SET password_hash = ? WHERE id = ?`)
+    .run(passwordHash, id);
+}
+
+/**
+ * Delete a user. Permission rows cascade (PRAGMA foreign_keys=ON);
+ * the per-user DB file is removed by the API layer (deleteUserDb).
+ */
+export function deleteUser(id: number): boolean {
+  const info = getDb().prepare(`DELETE FROM users WHERE id = ?`).run(id);
+  return info.changes > 0;
+}
+
 export function countActiveAdmins(): number {
   const row = getDb()
     .prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0`)

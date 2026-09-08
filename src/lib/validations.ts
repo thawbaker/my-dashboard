@@ -69,8 +69,22 @@ export const permissionsSchema = z.object({
   blockedAppIds: z.array(z.number().int().positive()),
 });
 
-export const toggleDisabledSchema = z.object({
-  disabled: z.boolean(),
+// Partial update of an existing user (admin). Password is deliberately
+// absent — that is set via POST /api/admin/users/:id/password. At least
+// one field must be provided.
+export const updateUserSchema = z
+  .object({
+    name: nameSchema.optional(),
+    username: usernameSchema.optional(),
+    email: emailSchema.optional(),
+    role: z.enum(['user', 'admin']).optional(),
+    disabled: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
+
+// Admin sets a user's password to a specified value (same policy as sign-up)
+export const setUserPasswordSchema = z.object({
+  password: passwordSchema,
 });
 
 export type SignUpInput = z.infer<typeof signUpSchema>;
@@ -79,4 +93,5 @@ export type SignUpAdminUserInput = z.infer<typeof signUpAdminUserSchema>;
 export type AppInput = z.infer<typeof appSchema>;
 export type UpdateAppInput = z.infer<typeof updateAppSchema>;
 export type PermissionsInput = z.infer<typeof permissionsSchema>;
-export type ToggleDisabledInput = z.infer<typeof toggleDisabledSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type SetUserPasswordInput = z.infer<typeof setUserPasswordSchema>;

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
@@ -69,5 +69,51 @@ export function ensureUserDb(username: string): string | null {
   } catch (err) {
     console.error(`Failed to ensure user DB for '${username}':`, err);
     return null;
+  }
+}
+
+/** All on-disk files that make up the user's DB (main + WAL sidecars). */
+function userDbFiles(username: string): string[] {
+  const base = userDbPath(username);
+  return ['', '-wal', '-shm'].map((suffix) => base + suffix);
+}
+
+/**
+ * Move the user's DB file when their username changes. Best-effort: if the
+ * target file already exists (another account) the move is skipped — the
+ * old file keeps its data and ensureUserDb() starts a fresh one for the
+ * new username. Failures are logged and never block the API request.
+ */
+export function renameUserDb(oldUsername: string, newUsername: string): void {
+  if (oldUsername === newUsername) return;
+  try {
+    const from = userDbPath(oldUsername);
+    const to = userDbPath(newUsername);
+    if (!existsSync(from)) return;
+    if (existsSync(to)) {
+      console.error(
+        `Cannot rename user DB '${oldUsername}' -> '${newUsername}': target already exists, old file kept`
+      );
+      return;
+    }
+    for (const file of userDbFiles(oldUsername)) {
+      if (existsSync(file)) renameSync(file, to + file.slice(from.length));
+    }
+  } catch (err) {
+    console.error(`Failed to rename user DB '${oldUsername}' -> '${newUsername}':`, err);
+  }
+}
+
+/**
+ * Remove the user's DB file (and WAL sidecars) when the account is
+ * deleted. Best-effort: logged and never blocking.
+ */
+export function deleteUserDb(username: string): void {
+  try {
+    for (const file of userDbFiles(username)) {
+      if (existsSync(file)) unlinkSync(file);
+    }
+  } catch (err) {
+    console.error(`Failed to delete user DB for '${username}':`, err);
   }
 }
