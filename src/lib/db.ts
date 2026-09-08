@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { deriveUsername } from '@/lib/user-db';
 
 // ---------------------------------------------------------------------------
 // Raw better-sqlite3 layer (no ORM). Schema contract: db/schema.sql
@@ -11,6 +12,8 @@ export type Role = 'user' | 'admin';
 export interface User {
   id: number;
   email: string;
+  /** Unique, filesystem-safe identity; per-user DB lives at user-data/<username>.db */
+  username: string;
   password_hash: string;
   name: string;
   role: Role;
@@ -25,6 +28,8 @@ export interface App {
   icon: string;
   url: string;
   enabled: 0 | 1;
+  /** Hidden from non-admin users; admins always see and can launch it. */
+  admin_only: 0 | 1;
   created_at: string;
 }
 
@@ -39,29 +44,87 @@ export function getDb(): Database.Database {
   _db = new Database(file);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
+  migrate(_db);
   return _db;
+}
+
+/**
+ * Self-healing schema migrations for databases created before a column
+ * existed. Idempotent: no-ops when the column is already present.
+ */
+function migrate(db: Database.Database): void {
+  const appCols = db.prepare(`PRAGMA table_info(applications)`).all() as { name: string }[];
+  if (!appCols.some((c) => c.name === 'admin_only')) {
+    db.exec(`ALTER TABLE applications ADD COLUMN admin_only INTEGER NOT NULL DEFAULT 0`);
+  }
+
+  const userCols = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
+  if (!userCols.some((c) => c.name === 'username')) {
+    // Pre-existing DBs: SQLite cannot ADD COLUMN ... UNIQUE to a non-empty
+    // table, so the column is added plain, backfilled, then covered by a
+    // unique index (the same mechanism schema.sql uses for fresh DBs).
+    db.exec(`ALTER TABLE users ADD COLUMN username TEXT`);
+  }
+  backfillUsernames(db);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+}
+
+/**
+ * Give users without a username one, derived from their email local part
+ * (john.doe@example.com → john.doe), deduped with a -2, -3, … suffix.
+ * Idempotent: no rows touched when every user already has a username.
+ */
+function backfillUsernames(db: Database.Database): void {
+  const taken = new Set(
+    (db.prepare(`SELECT username FROM users WHERE username IS NOT NULL AND username != ''`).all() as { username: string }[])
+      .map((r) => r.username.toLowerCase())
+  );
+  const missing = db
+    .prepare(`SELECT id, email FROM users WHERE username IS NULL OR username = ''`)
+    .all() as { id: number; email: string }[];
+  const update = db.prepare(`UPDATE users SET username = ? WHERE id = ?`);
+  if (missing.length > 0) {
+    db.transaction(() => {
+      for (const u of missing) {
+        const base = deriveUsername(u.email);
+        let candidate = base;
+        let n = 2;
+        while (taken.has(candidate.toLowerCase())) candidate = `${base}-${n++}`;
+        taken.add(candidate.toLowerCase());
+        update.run(candidate, u.id);
+      }
+    })();
+  }
 }
 
 // --- users -----------------------------------------------------------------
 
 export function createUser(input: {
   email: string;
+  username: string;
   passwordHash: string;
   name: string;
   role?: Role;
 }): User {
   const info = getDb()
     .prepare(
-      `INSERT INTO users (email, password_hash, name, role)
-       VALUES (@email, @passwordHash, @name, @role)`
+      `INSERT INTO users (email, username, password_hash, name, role)
+       VALUES (@email, @username, @passwordHash, @name, @role)`
     )
     .run({
       email: input.email,
+      username: input.username,
       passwordHash: input.passwordHash,
       name: input.name,
       role: input.role ?? 'user',
     });
   return getUserById(Number(info.lastInsertRowid))!;
+}
+
+export function getUserByUsername(username: string): User | null {
+  return (getDb().prepare(`SELECT * FROM users WHERE username = ?`).get(username) ?? null) as
+    | User
+    | null;
 }
 
 export function getUserByEmail(email: string): User | null {
@@ -106,24 +169,38 @@ export function getAppById(id: number): App | null {
   );
 }
 
-export function createApp(input: { name: string; slug: string; icon?: string; url?: string }): App {
+export function createApp(input: {
+  name: string;
+  slug: string;
+  icon?: string;
+  url?: string;
+  adminOnly?: boolean;
+}): App {
   const info = getDb()
     .prepare(
-      `INSERT INTO applications (name, slug, icon, url)
-       VALUES (@name, @slug, @icon, @url)`
+      `INSERT INTO applications (name, slug, icon, url, admin_only)
+       VALUES (@name, @slug, @icon, @url, @adminOnly)`
     )
     .run({
       name: input.name,
       slug: input.slug,
       icon: input.icon ?? 'layout-grid',
       url: input.url ?? '#',
+      adminOnly: input.adminOnly ? 1 : 0,
     });
   return getAppById(Number(info.lastInsertRowid))!;
 }
 
 export function updateApp(
   id: number,
-  patch: { name?: string; slug?: string; icon?: string; url?: string; enabled?: boolean }
+  patch: {
+    name?: string;
+    slug?: string;
+    icon?: string;
+    url?: string;
+    enabled?: boolean;
+    adminOnly?: boolean;
+  }
 ): App | null {
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
@@ -146,6 +223,10 @@ export function updateApp(
   if (patch.enabled !== undefined) {
     sets.push(`enabled = @enabled`);
     params.enabled = patch.enabled ? 1 : 0;
+  }
+  if (patch.adminOnly !== undefined) {
+    sets.push(`admin_only = @adminOnly`);
+    params.adminOnly = patch.adminOnly ? 1 : 0;
   }
   if (sets.length > 0) {
     getDb().prepare(`UPDATE applications SET ${sets.join(', ')} WHERE id = @id`).run(params);
@@ -172,8 +253,17 @@ export function setBlockedAppIds(userId: number, appIds: number[]): void {
   })(userId);
 }
 
-/** Enabled apps minus the user's denylist rows. New apps are auto-granted. */
-export function getAccessibleApps(userId: number): App[] {
-  const blocked = new Set(getBlockedAppIds(userId));
-  return listApps({ enabledOnly: true }).filter((app) => !blocked.has(app.id));
+/**
+ * Apps the given user can see and launch. Rules:
+ *  - only enabled apps (for any role);
+ *  - admins: all enabled apps, including admin_only ones — the denylist
+ *    does not apply to admins;
+ *  - users: enabled apps minus admin_only ones (hidden by role) minus the
+ *    user's denylist rows. New non-admin-only apps are auto-granted.
+ */
+export function getAccessibleApps(user: Pick<User, 'id' | 'role'>): App[] {
+  const enabled = listApps({ enabledOnly: true });
+  if (user.role === 'admin') return enabled;
+  const blocked = new Set(getBlockedAppIds(user.id));
+  return enabled.filter((app) => !app.admin_only && !blocked.has(app.id));
 }

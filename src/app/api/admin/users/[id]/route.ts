@@ -76,7 +76,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           role: updated.role,
           disabled: updated.disabled === 1,
           createdAt: updated.created_at,
-          appCount: getAccessibleApps(updated.id).length,
+          appCount: getAccessibleApps(updated).length,
         },
       },
       { status: 200, headers: corsHeaders(request) }

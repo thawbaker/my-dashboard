@@ -16,6 +16,7 @@ function appJson(app: {
   icon: string;
   url: string;
   enabled: 0 | 1;
+  admin_only: 0 | 1;
   created_at: string;
 }) {
   return {
@@ -25,6 +26,7 @@ function appJson(app: {
     icon: app.icon,
     url: app.url,
     enabled: app.enabled === 1,
+    adminOnly: app.admin_only === 1,
     createdAt: app.created_at,
   };
 }
@@ -64,18 +66,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const { name, url, icon, enabled } = result.data;
-    if (name === undefined && url === undefined && icon === undefined && enabled === undefined) {
+    const { name, url, icon, enabled, adminOnly } = result.data;
+    if (
+      name === undefined &&
+      url === undefined &&
+      icon === undefined &&
+      enabled === undefined &&
+      adminOnly === undefined
+    ) {
       return NextResponse.json(
         { error: 'No fields to update' },
         { status: 400, headers: corsHeaders(request) }
       );
     }
 
-    const patch: { name?: string; slug?: string; url?: string; icon?: string; enabled?: boolean } = {};
+    const patch: {
+      name?: string;
+      slug?: string;
+      url?: string;
+      icon?: string;
+      enabled?: boolean;
+      adminOnly?: boolean;
+    } = {};
     if (url !== undefined) patch.url = url;
     if (icon !== undefined) patch.icon = icon;
     if (enabled !== undefined) patch.enabled = enabled;
+    if (adminOnly !== undefined) patch.adminOnly = adminOnly;
 
     // Renaming recomputes the slug; refuse collisions with other apps
     if (name !== undefined) {

@@ -39,6 +39,7 @@ type Role = 'user' | 'admin';
 interface ManagedUser {
   id: number;
   email: string;
+  username: string;
   name: string;
   role: Role;
   disabled: boolean;
@@ -54,11 +55,13 @@ interface ManagedApp {
   icon: string;
   url: string;
   enabled: boolean;
+  adminOnly: boolean;
   createdAt: string;
 }
 
 interface CreateForm {
   name: string;
+  username: string;
   email: string;
   password: string;
   role: Role;
@@ -66,6 +69,7 @@ interface CreateForm {
 
 const emptyCreateForm: CreateForm = {
   name: '',
+  username: '',
   email: '',
   password: '',
   role: 'user',
@@ -176,9 +180,14 @@ export default function AdminUsersPage() {
       }
       const data = await res.json();
       const savedBlocked: number[] = data.blockedAppIds ?? permsBlocked;
-      const appCount = apps.filter(
-        (a) => a.enabled && !savedBlocked.includes(a.id)
-      ).length;
+      // Role-aware: admins see every enabled app; users see enabled,
+      // non-admin-only apps minus their denylist.
+      const appCount =
+        permsUser.role === 'admin'
+          ? apps.filter((a) => a.enabled).length
+          : apps.filter(
+              (a) => a.enabled && !a.adminOnly && !savedBlocked.includes(a.id)
+            ).length;
       setUsers((prev) =>
         prev.map((u) =>
           u.id === permsUser.id
@@ -250,6 +259,7 @@ export default function AdminUsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Username</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Access</TableHead>
@@ -261,7 +271,7 @@ export default function AdminUsersPage() {
             {users.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center text-muted-foreground"
                 >
                   No users yet.
@@ -274,6 +284,9 @@ export default function AdminUsersPage() {
                 className={user.disabled ? 'opacity-50' : ''}
               >
                 <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell>
+                  <code className="text-xs">{user.username}</code>
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {user.email}
                 </TableCell>
@@ -318,8 +331,9 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Permissions — {permsUser?.name}</DialogTitle>
             <DialogDescription>
-              Checked apps are accessible; unchecked apps are blocked for this
-              user (denylist). New apps are granted automatically.
+              {permsUser?.role === 'admin'
+                ? 'Admins can see and launch every enabled app — the per-user denylist does not apply to them.'
+                : 'Checked apps are accessible; unchecked apps are blocked (denylist). Admin-only apps are always hidden from users.'}
             </DialogDescription>
           </DialogHeader>
           {enabledApps.length === 0 ? (
@@ -328,20 +342,30 @@ export default function AdminUsersPage() {
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              {enabledApps.map((app) => (
-                <label
-                  key={app.id}
-                  className="flex items-center gap-2 text-sm cursor-pointer"
-                >
-                  <Checkbox
-                    checked={!permsBlocked.includes(app.id)}
-                    onCheckedChange={(checked) =>
-                      toggleAppAccess(app.id, checked === true)
-                    }
-                  />
-                  {app.name}
-                </label>
-              ))}
+              {enabledApps.map((app) => {
+                const isAdmin = permsUser?.role === 'admin';
+                // Locked for two reasons: admins always have access
+                // (denylist ignored); admin-only apps are denied to users by
+                // role, so a denylist row would be dead data.
+                const locked = isAdmin || app.adminOnly;
+                const checked = isAdmin ? true : !permsBlocked.includes(app.id);
+                return (
+                  <label
+                    key={app.id}
+                    className={`flex items-center gap-2 text-sm ${
+                      locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={locked}
+                      onCheckedChange={(c) => toggleAppAccess(app.id, c === true)}
+                    />
+                    {app.name}
+                    {app.adminOnly && <Badge variant="default">Admin only</Badge>}
+                  </label>
+                );
+              })}
             </div>
           )}
           <DialogFooter>
@@ -360,7 +384,7 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Create user</DialogTitle>
             <DialogDescription>
-              Provision a new account. It starts with access to all enabled apps.
+              Provision a new account. It starts with access to all enabled, non-admin-only apps.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
@@ -374,6 +398,22 @@ export default function AdminUsersPage() {
                 }
                 required
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="create-username">Username</Label>
+              <Input
+                id="create-username"
+                value={createForm.username}
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, username: e.target.value }))
+                }
+                required
+                placeholder="johndoe"
+              />
+              <p className="text-xs text-muted-foreground">
+                2–32 characters: letters, numbers, dots, dashes, underscores.
+                Becomes this user&apos;s personal data file name.
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="create-email">Email</Label>

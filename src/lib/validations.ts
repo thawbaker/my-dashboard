@@ -11,12 +11,24 @@ const nameSchema = z.string()
   .min(1, 'Name is required')
   .regex(/^[a-zA-Z\s]+$/, 'Name cannot contain numbers or special characters');
 
+// Username: unique, filesystem-safe (it becomes the per-user DB filename
+// user-data/<username>.db — see src/lib/user-db.ts). Must match
+// USERNAME_PATTERN there.
+const usernameSchema = z.string()
+  .min(2, 'Username must be at least 2 characters')
+  .max(32, 'Username must be at most 32 characters')
+  .regex(
+    /^[a-z0-9][a-z0-9._-]{1,31}$/i,
+    'Username may only use letters, numbers, dots, dashes, and underscores, and must start with a letter or number'
+  );
+
 // Email validation
 const emailSchema = z.string()
   .email('Please enter a valid email address');
 
 export const signUpSchema = z.object({
   name: nameSchema,
+  username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
 });
@@ -29,6 +41,7 @@ export const signInSchema = z.object({
 // Admin-provisioned account (role may be set; public sign-up is always 'user')
 export const signUpAdminUserSchema = z.object({
   name: nameSchema,
+  username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
   role: z.enum(['user', 'admin']),
@@ -38,6 +51,8 @@ export const appSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   url: z.string().min(1, 'URL is required').default('#'),
   icon: z.string().min(1, 'Icon is required').default('layout-grid'),
+  // Admin-only apps are hidden from every non-admin user's launcher.
+  adminOnly: z.boolean().default(false),
 });
 
 // Partial update — no defaults, so unspecified fields are left untouched
@@ -46,6 +61,7 @@ export const updateAppSchema = z.object({
   url: z.string().min(1, 'URL is required').optional(),
   icon: z.string().min(1, 'Icon is required').optional(),
   enabled: z.boolean().optional(),
+  adminOnly: z.boolean().optional(),
 });
 
 // Denylist: app ids the user CANNOT access

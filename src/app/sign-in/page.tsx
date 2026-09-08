@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
+import { AppHeader } from '@/components/app-header';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { signInSchema } from '@/lib/validations';
 import { z } from 'zod';
 
@@ -94,12 +96,16 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="relative min-h-screen flex items-center justify-center">
+      <div className="absolute right-4 top-4 sm:right-6 sm:top-6">
+        <ThemeToggle />
+      </div>
       <div className="max-w-md w-full space-y-8 px-8">
+        <AppHeader subtitle="Welcome back" />
         <div className="text-center">
-          <h2 className="text-3xl font-bold">Sign in to your account</h2>
+          <h2 className="text-xl font-semibold">Sign in to your account</h2>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-2 space-y-6" onSubmit={handleSubmit}>
           {serverError && (
             <div className="rounded-md bg-destructive/10 p-4">
               <p className="text-sm text-destructive">{serverError}</p>

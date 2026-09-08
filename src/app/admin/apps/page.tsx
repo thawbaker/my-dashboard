@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { AdminShell } from '@/components/admin-shell';
 import { AppIcon, APP_ICON_NAMES } from '@/components/app-icon';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -39,6 +40,7 @@ interface ManagedApp {
   icon: string;
   url: string;
   enabled: boolean;
+  adminOnly: boolean;
   createdAt: string;
 }
 
@@ -46,9 +48,10 @@ interface AppForm {
   name: string;
   url: string;
   icon: string;
+  adminOnly: boolean;
 }
 
-const emptyForm: AppForm = { name: '', url: '', icon: 'layout-grid' };
+const emptyForm: AppForm = { name: '', url: '', icon: 'layout-grid', adminOnly: false };
 
 export default function AdminAppsPage() {
   const [apps, setApps] = useState<ManagedApp[]>([]);
@@ -116,7 +119,7 @@ export default function AdminAppsPage() {
 
   const openEdit = (app: ManagedApp) => {
     setEditingApp(app);
-    setForm({ name: app.name, url: app.url, icon: app.icon });
+    setForm({ name: app.name, url: app.url, icon: app.icon, adminOnly: app.adminOnly });
     setDialogOpen(true);
   };
 
@@ -128,6 +131,7 @@ export default function AdminAppsPage() {
         name: form.name.trim(),
         url: form.url.trim() || '#',
         icon: form.icon,
+        adminOnly: form.adminOnly,
       };
       const res = await fetch(
         editingApp ? `/api/admin/apps/${editingApp.id}` : '/api/admin/apps',
@@ -149,7 +153,11 @@ export default function AdminAppsPage() {
         return;
       }
       toast.success(
-        editingApp ? 'App updated' : 'App created — available to all users'
+        editingApp
+          ? 'App updated'
+          : form.adminOnly
+            ? 'App created — visible to admins only'
+            : 'App created — available to all users'
       );
       setDialogOpen(false);
       await load();
@@ -172,8 +180,8 @@ export default function AdminAppsPage() {
     <AdminShell title="App management">
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">
-          {apps.length} app{apps.length === 1 ? '' : 's'} — new apps are
-          automatically available to every user
+          {apps.length} app{apps.length === 1 ? '' : 's'} — apps are
+          available to every user unless marked “Admin only”
         </p>
         <Button onClick={openCreate}>Add app</Button>
       </div>
@@ -185,6 +193,7 @@ export default function AdminAppsPage() {
               <TableHead>App</TableHead>
               <TableHead>Slug</TableHead>
               <TableHead>URL</TableHead>
+              <TableHead>Visibility</TableHead>
               <TableHead>Enabled</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -193,7 +202,7 @@ export default function AdminAppsPage() {
             {apps.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="text-center text-muted-foreground"
                 >
                   No apps yet — add the first one.
@@ -218,6 +227,15 @@ export default function AdminAppsPage() {
                   <span className="block truncate text-muted-foreground">
                     {app.url}
                   </span>
+                </TableCell>
+                <TableCell>
+                  {app.adminOnly ? (
+                    <Badge variant="default" title="Only admins can see and launch this app">
+                      Admin only
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">All users</Badge>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Switch
@@ -256,7 +274,7 @@ export default function AdminAppsPage() {
             <DialogDescription>
               {editingApp
                 ? 'Changes apply immediately. Renaming recomputes the slug.'
-                : 'New apps are granted to every user automatically (denylist model).'}
+                : 'New apps are granted to every user automatically (denylist model) unless marked admin-only.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="flex flex-col gap-4">
@@ -303,6 +321,22 @@ export default function AdminAppsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex flex-col gap-0.5">
+                <Label>Admin only</Label>
+                <p className="text-xs text-muted-foreground">
+                  Hide this app from every non-admin user. Admins can always
+                  see and launch it.
+                </p>
+              </div>
+              <Switch
+                checked={form.adminOnly}
+                onCheckedChange={(adminOnly) =>
+                  setForm((f) => ({ ...f, adminOnly }))
+                }
+                aria-label="Admin only"
+              />
             </div>
             <DialogFooter className="pt-2">
               <Button

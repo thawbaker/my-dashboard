@@ -42,7 +42,7 @@ getUserFromRequest(request: NextRequest): Promise<User | null>
 **Design Decisions**:
 - **bcrypt** for password hashing: Industry standard, resistant to rainbow table attacks
 - **jose** library for JWT: Edge-compatible, modern, and actively maintained
-- **24-hour token expiration**: Balance between security and user convenience
+- **30-minute sliding token expiration**: balances security (idle sessions die after 30 min) with user convenience (active sessions renew automatically); token helpers live in `token.ts` (Edge-safe) and the renewal happens in `src/middleware.ts`
 - **HTTP-only cookies**: Prevents XSS attacks by making tokens inaccessible to JavaScript
 
 ### 🗄️ `db/` - Database Layer

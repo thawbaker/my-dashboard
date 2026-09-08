@@ -1,27 +1,21 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import {
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  verifyToken,
+  renewTokenIfStale,
+  sessionCookieOptions,
+} from '@/lib/token';
 
 // Edge runtime: jose only — no DB, no bcrypt. This gate is a fast
 // pre-filter; the authoritative check (including the disable check)
 // happens in API routes via getSessionUser() and page data via /api/auth/me.
-const key = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-change-this-in-production'
-);
-
-async function getPayload(token: string): Promise<{ role?: string } | null> {
-  try {
-    const { payload } = await jwtVerify(token, key);
-    return payload as { role?: string };
-  } catch {
-    return null;
-  }
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get('auth-token')?.value;
-  const payload = token ? await getPayload(token) : null;
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const payload = token ? await verifyToken(token) : null;
 
   // /admin* — valid token AND admin role (from JWT, see note above)
   if (pathname.startsWith('/admin')) {
@@ -46,9 +40,25 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Sliding 30-minute expiration: any request (page or API) carrying a
+  // token older than half its TTL gets a fresh re-sign, so active users
+  // never hit a wall while an idle session dies 30 min after its last
+  // activity. No-op (plain next()) while the token is still fresh.
+  if (token) {
+    const renewed = await renewTokenIfStale(token);
+    if (renewed) {
+      const response = NextResponse.next();
+      response.cookies.set(SESSION_COOKIE, renewed, {
+        ...sessionCookieOptions(),
+        maxAge: SESSION_TTL_SECONDS,
+      });
+      return response;
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/sign-in', '/sign-up'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/sign-in', '/sign-up', '/api/:path*'],
 };

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { getAccessibleApps, getBlockedAppIds, getUserByEmail, listUsers } from '@/lib/db';
+import {
+  getAccessibleApps,
+  getBlockedAppIds,
+  getUserByEmail,
+  getUserByUsername,
+  listUsers,
+} from '@/lib/db';
 import { signUpAdminUserSchema } from '@/lib/validations';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { hashPassword } from '@/lib/auth';
@@ -19,11 +25,12 @@ export async function GET(request: NextRequest) {
   const users = listUsers().map((u) => ({
     id: u.id,
     email: u.email,
+    username: u.username,
     name: u.name,
     role: u.role,
     disabled: u.disabled === 1,
     createdAt: u.created_at,
-    appCount: getAccessibleApps(u.id).length,
+    appCount: getAccessibleApps(u).length,
     blockedAppIds: getBlockedAppIds(u.id),
   }));
 
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, name, role } = result.data;
+    const { email, password, name, role, username } = result.data;
 
     if (getUserByEmail(email)) {
       return NextResponse.json(
@@ -59,8 +66,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (getUserByUsername(username)) {
+      return NextResponse.json(
+        { error: 'Username already taken', errorType: 'username_taken' },
+        { status: 409, headers: corsHeaders(request) }
+      );
+    }
+
     const user = createUser({
       email,
+      username,
       passwordHash: await hashPassword(password),
       name,
       role,
@@ -71,11 +86,12 @@ export async function POST(request: NextRequest) {
         user: {
           id: user.id,
           email: user.email,
+          username: user.username,
           name: user.name,
           role: user.role,
           disabled: user.disabled === 1,
           createdAt: user.created_at,
-          appCount: getAccessibleApps(user.id).length,
+          appCount: getAccessibleApps(user).length,
         },
       },
       { status: 201, headers: corsHeaders(request) }

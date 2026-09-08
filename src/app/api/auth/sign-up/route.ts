@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hashPassword, createToken, setSession } from '@/lib/auth';
-import { createUser, getUserByEmail } from '@/lib/db';
+import { createUser, getUserByEmail, getUserByUsername } from '@/lib/db';
+import { ensureUserDb } from '@/lib/user-db';
 import { signUpSchema } from '@/lib/validations';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, name } = result.data;
+    const { email, password, name, username } = result.data;
 
     // Check if user already exists
     const existingUser = getUserByEmail(email);
@@ -38,12 +39,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Username is unique and becomes the per-user DB filename (user-data/<username>.db)
+    const existingUsername = getUserByUsername(username);
+    if (existingUsername) {
+      return NextResponse.json(
+        { error: 'Username already taken', errorType: 'username_taken' },
+        { status: 409, headers: corsHeaders(request) }
+      );
+    }
+
     // Public sign-up is always role=user. Denylist model: no permission
     // rows needed — new users get access to every enabled app by default.
     const hashedPassword = await hashPassword(password);
-    const user = createUser({ email, passwordHash: hashedPassword, name, role: 'user' });
+    const user = createUser({
+      email,
+      username,
+      passwordHash: hashedPassword,
+      name,
+      role: 'user',
+    });
 
-    // Create JWT token
+    // Create the user's own SQLite DB (user-data/<username>.db) now that the
+    // account exists — dashboard apps use it. Best-effort.
+    ensureUserDb(user.username);
+
+    // Create JWT token (30-min sliding TTL, see src/lib/token.ts)
     const token = await createToken({
       id: user.id,
       email: user.email,
@@ -51,16 +71,18 @@ export async function POST(request: NextRequest) {
       role: user.role,
     });
 
-    // Set session cookie
-    await setSession(token);
-
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         message: 'User created successfully',
         user: { id: user.id, email: user.email, name: user.name, role: user.role },
       },
       { status: 201, headers: corsHeaders(request) }
     );
+
+    // Set session cookie on the response (cookies() is read-only in route handlers)
+    setSession(response, token);
+
+    return response;
   } catch {
     return NextResponse.json(
       { error: 'Internal server error' },

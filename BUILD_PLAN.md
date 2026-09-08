@@ -22,6 +22,7 @@ All decisions below were settled in the grilling session (see decision log).
 | 13 | App mgmt | Create/edit/toggle-enabled; icon = fixed lucide set (dropdown) |
 | 14 | Testing | No automated tests; manual verification checklist (phase 7) |
 | 15 | Next version | Bump 15.1.8 → latest 15.x (15.5.25), same App Router pattern. No experimental features |
+| 16 | Per-user DBs | Every user/admin owns `user-data/<username>.db` (env `USER_DATA_DIR`), created on login + self-healed in `getSessionUser()`. Central DB keeps user/app maintenance only; all other dashboard apps use the user's own DB. Filename = new unique `users.username` column (2–32 chars, `[a-zA-Z0-9._-]`); existing users backfilled from email local part. New files: empty, WAL. App launch wiring deferred (apps are placeholder URLs). |
 
 ## Schema (contract — `db/schema.sql`, plain SQL)
 
@@ -29,6 +30,7 @@ All decisions below were settled in the grilling session (see decision log).
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   email         TEXT NOT NULL UNIQUE,
+  username      TEXT NOT NULL UNIQUE,  -- per-user DB: user-data/<username>.db
   password_hash TEXT NOT NULL,
   name          TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),

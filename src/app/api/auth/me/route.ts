@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
-      apps: getAccessibleApps(user.id),
+      // Role-aware: admins get every enabled app (incl. admin-only);
+      // users get enabled, non-admin-only apps minus their denylist.
+      apps: getAccessibleApps(user),
     },
     { status: 200, headers: corsHeaders(request) }
   );

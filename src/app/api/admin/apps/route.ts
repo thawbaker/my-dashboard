@@ -14,6 +14,7 @@ function appJson(app: {
   icon: string;
   url: string;
   enabled: 0 | 1;
+  admin_only: 0 | 1;
   created_at: string;
 }) {
   return {
@@ -23,6 +24,7 @@ function appJson(app: {
     icon: app.icon,
     url: app.url,
     enabled: app.enabled === 1,
+    adminOnly: app.admin_only === 1,
     createdAt: app.created_at,
   };
 }
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, url, icon } = result.data;
+    const { name, url, icon, adminOnly } = result.data;
     const slug = slugify(name);
     if (!slug) {
       return NextResponse.json(
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const app = createApp({ name, slug, icon, url });
+    const app = createApp({ name, slug, icon, url, adminOnly });
     return NextResponse.json(
       { app: appJson(app) },
       { status: 201, headers: corsHeaders(request) }

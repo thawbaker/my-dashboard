@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 export default function SignUpPage() {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -25,6 +26,8 @@ export default function SignUpPage() {
         signUpSchema.shape.email.parse(value);
       } else if (field === 'password') {
         signUpSchema.shape.password.parse(value);
+      } else if (field === 'username') {
+        signUpSchema.shape.username.parse(value);
       } else if (field === 'name') {
         signUpSchema.shape.name.parse(value);
       }
@@ -50,7 +53,7 @@ export default function SignUpPage() {
 
     // Validate all fields
     try {
-      signUpSchema.parse({ name, email, password });
+      signUpSchema.parse({ name, username, email, password });
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: { [key: string]: string } = {};
@@ -70,7 +73,7 @@ export default function SignUpPage() {
       const res = await fetch('/api/auth/sign-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, username, email, password }),
       });
 
       const data = await res.json();
@@ -120,6 +123,30 @@ export default function SignUpPage() {
               {errors.name && (
                 <p className="text-xs text-destructive">{errors.name}</p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                required
+                placeholder="johndoe"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  validateField('username', e.target.value);
+                }}
+                className={errors.username ? 'border-destructive' : ''}
+              />
+              {errors.username && (
+                <p className="text-xs text-destructive">{errors.username}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                2–32 characters: letters, numbers, dots, dashes, underscores.
+                Becomes your personal data file name.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email address</Label>

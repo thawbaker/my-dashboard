@@ -18,6 +18,24 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Keep in sync with deriveUsername() in src/lib/user-db.ts
+function deriveUsername(email) {
+  const local = (email.split('@')[0] ?? email).toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  return local.replace(/^[.\-]+/, '').slice(0, 32).replace(/[.\-]+$/, '') || 'user';
+}
+
+function uniqueUsername(base, excludeId = null) {
+  let candidate = base;
+  let n = 2;
+  for (;;) {
+    const row = excludeId
+      ? db.prepare(`SELECT id FROM users WHERE username = ? AND id != ?`).get(candidate, excludeId)
+      : db.prepare(`SELECT id FROM users WHERE username = ?`).get(candidate);
+    if (!row) return candidate;
+    candidate = `${base}-${n++}`;
+  }
+}
+
 // --- first admin -------------------------------------------------------------
 const adminCount = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'admin'`).get().n;
 if (adminCount === 0) {
@@ -39,18 +57,18 @@ if (adminCount === 0) {
   const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(email);
   const passwordHash = await bcrypt.hash(password, 10);
   if (existing) {
-    // Re-run with an existing (non-admin) account: promote it.
-    db.prepare(`UPDATE users SET role = 'admin', password_hash = ? WHERE id = ?`).run(
-      passwordHash,
-      existing.id
-    );
+    // Re-run with an existing (non-admin) account: promote it. Keep a
+    // pre-existing username; fill one in (derived from the email) if the
+    // account predates the users.username column.
+    db.prepare(
+      `UPDATE users SET role = 'admin', password_hash = ?,
+       username = COALESCE(NULLIF(username, ''), ?) WHERE id = ?`
+    ).run(passwordHash, uniqueUsername(deriveUsername(email), existing.id), existing.id);
     console.log(`Promoted existing user ${email} to admin.`);
   } else {
-    db.prepare(`INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, 'admin')`).run(
-      email,
-      passwordHash,
-      email,
-    );
+    db.prepare(
+      `INSERT INTO users (email, username, password_hash, name, role) VALUES (?, ?, ?, ?, 'admin')`
+    ).run(email, uniqueUsername(deriveUsername(email)), passwordHash, email);
     console.log(`Created admin ${email}.`);
   }
 } else {

@@ -44,10 +44,25 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     // Ignore ids that don't reference a real app
-    const existingAppIds = new Set(listApps().map((app) => app.id));
-    const blockedAppIds = result.data.blockedAppIds.filter((appId) =>
+    const allApps = listApps();
+    const existingAppIds = new Set(allApps.map((app) => app.id));
+    let blockedAppIds = result.data.blockedAppIds.filter((appId) =>
       existingAppIds.has(appId)
     );
+
+    // Normalize against role semantics so the stored state matches the
+    // effective access:
+    //  - admins bypass the denylist entirely → nothing to store for them;
+    //  - admin-only apps are already denied to users by role → dead rows
+    //    (a stale row would also re-hide the app if it is later un-flagged).
+    if (target.role === 'admin') {
+      blockedAppIds = [];
+    } else {
+      const adminOnlyIds = new Set(
+        allApps.filter((app) => app.admin_only === 1).map((app) => app.id)
+      );
+      blockedAppIds = blockedAppIds.filter((id) => !adminOnlyIds.has(id));
+    }
 
     setBlockedAppIds(targetId, blockedAppIds);
 

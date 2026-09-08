@@ -1,20 +1,14 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AppHeader } from "@/components/app-header";
 
 export default function Home() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold">
-            Authentication Demo
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            A simple authentication system built with Next.js
-          </p>
-        </div>
-        
-        <div className="mt-8 space-y-4">
+        <AppHeader />
+
+        <div className="space-y-4">
           <Button asChild className="w-full">
             <Link href="/sign-in">
               Sign In

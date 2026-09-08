@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface SessionUser {
   id: number;
@@ -66,6 +67,7 @@ export function AdminShell({ title, children }: { title: string; children: React
             <h1 className="text-xl font-semibold">{title}</h1>
             <div className="flex items-center gap-3">
               {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
+              <ThemeToggle />
               <Button variant="ghost" onClick={() => router.push('/dashboard')}>
                 Dashboard
               </Button>

@@ -37,8 +37,8 @@ The API is built using Next.js 15 App Router's Route Handlers, providing a moder
 - Validates input using Zod schema
 - Checks for existing email to prevent duplicates
 - Hashes password with bcrypt (10 rounds)
-- Creates JWT token with 24h expiration
-- Sets HTTP-only cookie for session
+- Creates JWT token with a 30-minute sliding expiration (see Token Management)
+- Sets HTTP-only cookie for session (also with a 30-minute max-age)
 
 ---
 
@@ -142,8 +142,9 @@ All endpoints follow a consistent error response format:
 
 2. **Token Management**:
    - JWT tokens signed with secret key
-   - 24-hour expiration for security
+   - **30-minute sliding expiration**: each token (and its cookie) lives 30 minutes; the edge middleware re-signs any token older than 15 minutes on the next request, so active users stay logged in and an idle session expires 30 minutes after its last activity
    - Stored in HTTP-only cookies to prevent XSS
+   - See `src/lib/token.ts` (Edge-safe token helpers) and `src/middleware.ts` (sliding renewal)
 
 3. **CORS & Headers**:
    - Handled automatically by Next.js

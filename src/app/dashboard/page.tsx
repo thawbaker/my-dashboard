@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AppIcon } from '@/components/app-icon';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface AppItem {
   id: number;
@@ -49,6 +50,37 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
+  // Session heartbeat: a request every 5 minutes while the tab is visible
+  // counts as activity — the middleware slides the 30-minute token forward
+  // — and detects an idle-expired session early (redirects on 401) instead
+  // of waiting for the user's next click. Hidden tabs don't beat, so a
+  // backgrounded dashboard still times out after 30 minutes.
+  useEffect(() => {
+    if (!user) return;
+    const HEARTBEAT_MS = 5 * 60 * 1000;
+
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) router.push('/sign-in');
+      } catch {
+        // Network blip — keep the session; the next tick retries.
+      }
+    };
+
+    const timer = setInterval(check, HEARTBEAT_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [user, router]);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -74,6 +106,7 @@ export default function DashboardPage() {
             <h1 className="text-xl font-semibold">Dashboard</h1>
             <div className="flex items-center gap-3">
               {user && <span className="text-sm text-muted-foreground">{user.name}</span>}
+              <ThemeToggle />
               <Button onClick={handleLogout} variant="outline">
                 Logout
               </Button>

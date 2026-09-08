@@ -48,6 +48,7 @@ sqlite.db
 
 # local sqlite data
 data/
+user-data/
 *.db
 *.db-wal
 *.db-shm

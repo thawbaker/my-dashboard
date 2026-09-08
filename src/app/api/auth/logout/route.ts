@@ -10,10 +10,14 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  await clearSession();
-
-  return NextResponse.json(
+  // clearSession() must run on the outgoing response: in Next.js 15 route
+  // handlers cookies() is read-only, so the old cookies().delete() call
+  // never reached the browser and the session survived "logout".
+  const response = NextResponse.json(
     { message: 'Logged out successfully' },
     { status: 200, headers: corsHeaders(request) }
   );
+  clearSession(response);
+
+  return response;
 }
