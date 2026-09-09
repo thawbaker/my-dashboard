@@ -101,10 +101,17 @@ export const kanbanCreateCardSchema = z.object({
   description: z.string().max(2000, 'Description must be at most 2000 characters').optional(),
 });
 
+const hmsPattern = /^[+-]?\d{2}:\d{2}:\d{2}$/;
+
 export const kanbanUpdateCardSchema = z
   .object({
     title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters').optional(),
     description: z.string().max(2000, 'Description must be at most 2000 characters').optional(),
+    estimatedDuration: z.string().regex(hmsPattern, 'Must be HH:MM:SS format').nullable().optional(),
+    startTime: z.string().nullable().optional(),
+    endTime: z.string().nullable().optional(),
+    actualDuration: z.string().regex(hmsPattern, 'Must be HH:MM:SS format').nullable().optional(),
+    completed: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 
@@ -124,5 +131,9 @@ export type SetUserPasswordInput = z.infer<typeof setUserPasswordSchema>;
 export type KanbanCreateListInput = z.infer<typeof kanbanCreateListSchema>;
 export type KanbanUpdateListInput = z.infer<typeof kanbanUpdateListSchema>;
 export type KanbanCreateCardInput = z.infer<typeof kanbanCreateCardSchema>;
+export const kanbanWorkSchema = z.object({
+  duration: z.string().regex(hmsPattern, 'Must be HH:MM:SS format').optional(),
+});
+
 export type KanbanUpdateCardInput = z.infer<typeof kanbanUpdateCardSchema>;
 export type KanbanMoveCardInput = z.infer<typeof kanbanMoveCardSchema>;

@@ -18,6 +18,20 @@ export interface CardRow {
   position: number;
   created_at: string;
   updated_at: string;
+  start_time: string | null;
+  end_time: string | null;
+  estimated_duration: string | null;
+  actual_duration: string | null;
+  completed: number;
+}
+
+export interface WorkSessionRow {
+  id: number;
+  card_id: number;
+  start_time: string;
+  end_time: string | null;
+  duration: string;
+  created_at: string;
 }
 
 export interface KanbanListJson {
@@ -35,6 +49,21 @@ export interface KanbanCardJson {
   position: number;
   createdAt: string;
   updatedAt: string;
+  startTime: string | null;
+  endTime: string | null;
+  estimatedDuration: string | null;
+  actualDuration: string | null;
+  completed: boolean;
+  activeSessionId: number | null;
+}
+
+export interface WorkSessionJson {
+  id: number;
+  cardId: number;
+  startTime: string;
+  endTime: string | null;
+  duration: string;
+  createdAt: string;
 }
 
 const connections = new Map<string, DatabaseSync>();
@@ -88,7 +117,21 @@ function initKanbanSchema(db: DatabaseSync): void {
       description TEXT NOT NULL DEFAULT '',
       position    INTEGER NOT NULL DEFAULT 0,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      start_time  TEXT,
+      end_time    TEXT,
+      estimated_duration TEXT,
+      actual_duration    TEXT,
+      completed  INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS work_sessions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id    INTEGER NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+      start_time TEXT NOT NULL,
+      end_time   TEXT,
+      duration   TEXT NOT NULL DEFAULT '00:00:00',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_kanban_lists_position
@@ -96,7 +139,39 @@ function initKanbanSchema(db: DatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_list_position
       ON kanban_cards(list_id, position, id);
+
+    CREATE INDEX IF NOT EXISTS idx_work_sessions_card
+      ON work_sessions(card_id, id);
   `);
+
+  // Migrate existing databases — add columns that may not exist yet
+  const migrateColumns = [
+    'start_time TEXT',
+    'end_time TEXT',
+    'estimated_duration TEXT',
+    'actual_duration TEXT',
+    'completed INTEGER NOT NULL DEFAULT 0',
+  ];
+  for (const col of migrateColumns) {
+    try {
+      db.exec(`ALTER TABLE kanban_cards ADD COLUMN ${col}`);
+    } catch {
+      // Column already exists — ignore
+    }
+  }
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS work_sessions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id    INTEGER NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+      start_time TEXT NOT NULL,
+      end_time   TEXT,
+      duration   TEXT NOT NULL DEFAULT '00:00:00',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_work_sessions_card ON work_sessions(card_id, id)`);
+  } catch {
+    // Already exists
+  }
 
   const row = db.prepare(`SELECT COUNT(*) AS n FROM kanban_lists`).get() as { n: number };
   if (row.n > 0) return;
@@ -116,7 +191,8 @@ export function getBoard(username: string): Array<ListRow & { cards: CardRow[] }
     .all() as unknown as ListRow[];
   const cards = db
     .prepare(
-      `SELECT id, list_id, title, description, position, created_at, updated_at
+      `SELECT id, list_id, title, description, position, created_at, updated_at,
+              start_time, end_time, estimated_duration, actual_duration, completed
        FROM kanban_cards
        ORDER BY list_id ASC, position ASC, id ASC`
     )
@@ -190,22 +266,33 @@ export function createCard(
 
   return db
     .prepare(
-      `SELECT id, list_id, title, description, position, created_at, updated_at
+      `SELECT id, list_id, title, description, position, created_at, updated_at,
+              start_time, end_time, estimated_duration, actual_duration, completed
        FROM kanban_cards
        WHERE id = ?`
     )
     .get(Number(info.lastInsertRowid)) as unknown as CardRow;
 }
 
+
 export function updateCard(
   username: string,
   id: number,
-  patch: { title?: string; description?: string }
+  patch: {
+    title?: string;
+    description?: string;
+    estimatedDuration?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    actualDuration?: string | null;
+    completed?: boolean;
+  }
 ): CardRow | null {
   const db = getKanbanDb(username);
   const existing = db
     .prepare(
-      `SELECT id, list_id, title, description, position, created_at, updated_at
+      `SELECT id, list_id, title, description, position, created_at, updated_at,
+              start_time, end_time, estimated_duration, actual_duration, completed
        FROM kanban_cards
        WHERE id = ?`
     )
@@ -214,16 +301,25 @@ export function updateCard(
 
   const title = patch.title ?? existing.title;
   const description = patch.description ?? existing.description;
+  const startTime = patch.startTime !== undefined ? patch.startTime : existing.start_time;
+  const endTime = patch.endTime !== undefined ? patch.endTime : existing.end_time;
+  const estimatedDuration = patch.estimatedDuration !== undefined ? patch.estimatedDuration : existing.estimated_duration;
+  const actualDuration = patch.actualDuration !== undefined ? patch.actualDuration : existing.actual_duration;
+  const completed = patch.completed !== undefined ? (patch.completed ? 1 : 0) : existing.completed;
 
   db.prepare(
     `UPDATE kanban_cards
-     SET title = ?, description = ?, updated_at = datetime('now')
+     SET title = ?, description = ?,
+         start_time = ?, end_time = ?,
+         estimated_duration = ?, actual_duration = ?,
+         completed = ?, updated_at = datetime('now')
      WHERE id = ?`
-  ).run(title, description, id);
+  ).run(title, description, startTime, endTime, estimatedDuration, actualDuration, completed, id);
 
   return db
     .prepare(
-      `SELECT id, list_id, title, description, position, created_at, updated_at
+      `SELECT id, list_id, title, description, position, created_at, updated_at,
+              start_time, end_time, estimated_duration, actual_duration, completed
        FROM kanban_cards
        WHERE id = ?`
     )
@@ -309,7 +405,7 @@ export function listJson(row: ListRow): KanbanListJson {
   };
 }
 
-export function cardJson(row: CardRow): KanbanCardJson {
+export function cardJson(row: CardRow, activeSessionId: number | null = null): KanbanCardJson {
   return {
     id: row.id,
     listId: row.list_id,
@@ -318,5 +414,254 @@ export function cardJson(row: CardRow): KanbanCardJson {
     position: row.position,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    startTime: row.start_time ?? null,
+    endTime: row.end_time ?? null,
+    estimatedDuration: row.estimated_duration ?? null,
+    actualDuration: row.actual_duration ?? null,
+    completed: row.completed === 1,
+    activeSessionId,
   };
+}
+
+export function workSessionJson(row: WorkSessionRow): WorkSessionJson {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    startTime: row.start_time,
+    endTime: row.end_time ?? null,
+    duration: row.duration,
+    createdAt: row.created_at,
+  };
+}
+
+// ── Time-tracking helpers ────────────────────────────────────────────────────
+
+/**
+ * Parse a HH:MM:SS string to total seconds. Returns 0 on null/empty/invalid.
+ */
+export function hmsToSeconds(hms: string | null | undefined): number {
+  if (!hms) return 0;
+  const parts = hms.split(':').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return 0;
+  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+/**
+ * Format total seconds as HH:MM:SS (zero-padded). Clamped to 0.
+ */
+export function secondsToHms(total: number): string {
+  const s = Math.max(0, Math.floor(total));
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+/**
+ * Add two HH:MM:SS duration strings and return the sum as HH:MM:SS.
+ */
+export function addDurations(a: string | null | undefined, b: string | null | undefined): string {
+  return secondsToHms(hmsToSeconds(a) + hmsToSeconds(b));
+}
+
+/**
+ * Subtract b from a (both HH:MM:SS). Returns signed difference as +/-HH:MM:SS.
+ */
+export function diffDurations(a: string | null | undefined, b: string | null | undefined): string {
+  const sDiff = hmsToSeconds(a) - hmsToSeconds(b);
+  const abs = Math.abs(sDiff);
+  const hh = Math.floor(abs / 3600);
+  const mm = Math.floor((abs % 3600) / 60);
+  const ss = abs % 60;
+  const sign = sDiff < 0 ? '-' : '+';
+  return `${sign}${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+/**
+ * Get the active (non-ended) work session for a card, or null.
+ */
+function getActiveSession(db: DatabaseSync, cardId: number): WorkSessionRow | null {
+  const row = db
+    .prepare(
+      `SELECT id, card_id, start_time, end_time, duration, created_at
+       FROM work_sessions
+       WHERE card_id = ? AND end_time IS NULL
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(cardId) as WorkSessionRow | undefined;
+  return row ?? null;
+}
+
+/**
+ * Start a work session for a card. If the card has no start_time, sets it to now.
+ * Returns the new session row, or null if the card doesn't exist or a session
+ * is already active.
+ */
+export function startWorkSession(username: string, cardId: number): WorkSessionRow | null {
+  const db = getKanbanDb(username);
+  return withTransaction(db, () => {
+    const card = db
+      .prepare(`SELECT id, start_time FROM kanban_cards WHERE id = ?`)
+      .get(cardId) as { id: number; start_time: string | null } | undefined;
+    if (!card) return null;
+
+    const active = getActiveSession(db, cardId);
+    if (active) return null;
+
+    const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+
+    if (!card.start_time) {
+      db.prepare(
+        `UPDATE kanban_cards SET start_time = ?, updated_at = datetime('now') WHERE id = ?`
+      ).run(now, cardId);
+    }
+
+    const info = db
+      .prepare(`INSERT INTO work_sessions (card_id, start_time) VALUES (?, ?)`)
+      .run(cardId, now);
+
+    return db
+      .prepare(
+        `SELECT id, card_id, start_time, end_time, duration, created_at
+         FROM work_sessions WHERE id = ?`
+      )
+      .get(Number(info.lastInsertRowid)) as unknown as WorkSessionRow;
+  });
+}
+
+/**
+ * Pause/stop the active work session. Calculates the duration from start to now
+ * (or uses the provided explicit duration), updates the session, and accumulates
+ * into the card's actual_duration.
+ * Returns the updated session row, or null if no active session.
+ */
+export function pauseWorkSession(
+  username: string,
+  cardId: number,
+  explicitDuration?: string
+): WorkSessionRow | null {
+  const db = getKanbanDb(username);
+  return withTransaction(db, () => {
+    const active = getActiveSession(db, cardId);
+    if (!active) return null;
+
+    const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+    const duration = explicitDuration ?? calcDurationHms(active.start_time, now);
+
+    db.prepare(
+      `UPDATE work_sessions SET end_time = ?, duration = ? WHERE id = ?`
+    ).run(now, duration, active.id);
+
+    const card = db
+      .prepare(`SELECT actual_duration FROM kanban_cards WHERE id = ?`)
+      .get(cardId) as { actual_duration: string | null };
+    const newActual = addDurations(card.actual_duration, duration);
+    db.prepare(
+      `UPDATE kanban_cards SET actual_duration = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(newActual, cardId);
+
+    return db
+      .prepare(
+        `SELECT id, card_id, start_time, end_time, duration, created_at
+         FROM work_sessions WHERE id = ?`
+      )
+      .get(active.id) as unknown as WorkSessionRow;
+  });
+}
+
+/**
+ * Update the active session's duration (heartbeat). Does NOT end the session.
+ * Returns the updated session row, or null if no active session.
+ */
+export function heartbeatWorkSession(
+  username: string,
+  cardId: number,
+  duration: string
+): WorkSessionRow | null {
+  const db = getKanbanDb(username);
+  const active = getActiveSession(db, cardId);
+  if (!active) return null;
+
+  db.prepare(`UPDATE work_sessions SET duration = ? WHERE id = ?`).run(duration, active.id);
+
+  // Recalculate card actual_duration: sum completed sessions + this active duration
+  const allCompleted = db
+    .prepare(
+      `SELECT COALESCE(SUM(
+        CAST(substr(duration,1,2) AS INTEGER)*3600 +
+        CAST(substr(duration,4,2) AS INTEGER)*60 +
+        CAST(substr(duration,7,2) AS INTEGER)
+      ), 0) AS total
+       FROM work_sessions WHERE card_id = ? AND id != ? AND end_time IS NOT NULL`
+    )
+    .get(cardId, active.id) as { total: number };
+  const newActual = secondsToHms(allCompleted.total + hmsToSeconds(duration));
+  db.prepare(
+    `UPDATE kanban_cards SET actual_duration = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(newActual, cardId);
+
+  return db
+    .prepare(
+      `SELECT id, card_id, start_time, end_time, duration, created_at
+       FROM work_sessions WHERE id = ?`
+    )
+    .get(active.id) as unknown as WorkSessionRow;
+}
+
+/**
+ * Complete a card: pause any active session, set end_time, mark completed.
+ * Returns the updated card row, or null if card not found.
+ */
+export function completeCard(username: string, cardId: number): CardRow | null {
+  const db = getKanbanDb(username);
+  return withTransaction(db, () => {
+    const card = db
+      .prepare(
+        `SELECT id, start_time, end_time, actual_duration, completed
+         FROM kanban_cards WHERE id = ?`
+      )
+      .get(cardId) as CardRow | undefined;
+    if (!card) return null;
+    if (card.completed) return card as unknown as CardRow;
+
+    const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+
+    // Pause any active session first
+    const active = getActiveSession(db, cardId);
+    if (active) {
+      const duration = calcDurationHms(active.start_time, now);
+      db.prepare(
+        `UPDATE work_sessions SET end_time = ?, duration = ? WHERE id = ?`
+      ).run(now, duration, active.id);
+
+      const newActual = addDurations(card.actual_duration, duration);
+      db.prepare(
+        `UPDATE kanban_cards SET end_time = ?, actual_duration = ?,
+         completed = 1, updated_at = datetime('now') WHERE id = ?`
+      ).run(now, newActual, cardId);
+    } else {
+      db.prepare(
+        `UPDATE kanban_cards SET end_time = ?, completed = 1,
+         updated_at = datetime('now') WHERE id = ?`
+      ).run(now, cardId);
+    }
+
+    return db
+      .prepare(
+        `SELECT id, list_id, title, description, position, created_at, updated_at,
+                start_time, end_time, estimated_duration, actual_duration, completed
+         FROM kanban_cards WHERE id = ?`
+      )
+      .get(cardId) as unknown as CardRow;
+  });
+}
+
+/**
+ * Calculate duration between two ISO-ish datetime strings in HH:MM:SS.
+ */
+export function calcDurationHms(startStr: string, endStr: string): string {
+  const start = new Date(startStr.replace(' ', 'T') + 'Z').getTime();
+  const end = new Date(endStr.replace(' ', 'T') + 'Z').getTime();
+  const diffMs = Math.max(0, end - start);
+  return secondsToHms(Math.floor(diffMs / 1000));
 }

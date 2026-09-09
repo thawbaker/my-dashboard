@@ -6,6 +6,12 @@ export interface KanbanCard {
   position: number;
   createdAt: string;
   updatedAt: string;
+  startTime: string | null;
+  endTime: string | null;
+  estimatedDuration: string | null;
+  actualDuration: string | null;
+  completed: boolean;
+  activeSessionId: number | null;
 }
 
 export interface KanbanList {

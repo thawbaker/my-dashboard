@@ -46,7 +46,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const patch: { title?: string; description?: string } = {};
+    const patch: {
+      title?: string;
+      description?: string;
+      estimatedDuration?: string | null;
+      startTime?: string | null;
+      endTime?: string | null;
+      actualDuration?: string | null;
+      completed?: boolean;
+    } = {};
     if (result.data.title !== undefined) {
       const title = result.data.title.trim();
       if (!title) {
@@ -62,6 +70,21 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
     if (result.data.description !== undefined) {
       patch.description = result.data.description.trim();
+    }
+    if (result.data.estimatedDuration !== undefined) {
+      patch.estimatedDuration = result.data.estimatedDuration;
+    }
+    if (result.data.startTime !== undefined) {
+      patch.startTime = result.data.startTime;
+    }
+    if (result.data.endTime !== undefined) {
+      patch.endTime = result.data.endTime;
+    }
+    if (result.data.actualDuration !== undefined) {
+      patch.actualDuration = result.data.actualDuration;
+    }
+    if (result.data.completed !== undefined) {
+      patch.completed = result.data.completed;
     }
 
     const card = updateCard(user.username, cardId, patch);

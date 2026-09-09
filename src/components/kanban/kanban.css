@@ -482,6 +482,21 @@ html.dark .kanban-root {
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --green: #22c55e;
+  --green-hover: #16a34a;
+  --red: #ef4444;
+  --red-hover: #dc2626;
+  --over-budget: #ef4444;
+  --under-budget: #22c55e;
+}
+
+.kanban-root {
+  --green: #16a34a;
+  --green-hover: #15803d;
+  --red: #dc2626;
+  --red-hover: #b91c1c;
+  --over-budget: #dc2626;
+  --under-budget: #16a34a;
 }
 
 html.dark .kanban-root .toolbar,
@@ -510,6 +525,246 @@ html.dark .kanban-root .btn-primary:hover {
 
 html.dark .kanban-root .btn-danger:hover {
   background: rgba(220, 38, 38, 0.12);
+}
+
+html.dark .kanban-root .time-info-row,
+html.dark .kanban-root .timer-dialog {
+  background: hsl(240 3.7% 15.9%);
+}
+
+/* ── Time-tracking info rows in edit form ──────────────────────────── */
+
+.kanban-root .time-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--card-bg);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  min-height: 32px;
+}
+
+.kanban-root .time-info-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.kanban-root .time-info-value {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  color: var(--text);
+}
+
+.kanban-root .time-info-over .time-info-value {
+  color: var(--over-budget);
+}
+
+.kanban-root .time-info-under .time-info-value {
+  color: var(--under-budget);
+}
+
+/* ── Work / Complete buttons ─────────────────────────────────────── */
+
+.kanban-root .btn-work {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.kanban-root .btn-work:hover {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+}
+
+.kanban-root .btn-complete {
+  background: var(--under-budget);
+  border-color: var(--under-budget);
+  color: #fff;
+}
+
+.kanban-root .btn-complete:hover {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+}
+
+.kanban-root .btn-complete:disabled {
+  opacity: 0.5;
+}
+
+/* ── Card completed badge ────────────────────────────────────────── */
+
+.kanban-root .card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kanban-root .card-completed-badge {
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kanban-root .card-time-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+.kanban-root .card-time-est {
+  color: var(--text-secondary);
+}
+
+.kanban-root .card-time-act {
+  color: var(--text);
+}
+
+.kanban-root .card-time-var {
+  font-weight: 600;
+}
+
+.kanban-root .card-time-over {
+  color: var(--over-budget);
+}
+
+.kanban-root .card-time-under {
+  color: var(--under-budget);
+}
+
+/* ── Timer dialog ────────────────────────────────────────────────── */
+
+.kanban-root .timer-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.kanban-root .timer-dialog {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+  width: 360px;
+  max-width: 90vw;
+  position: relative;
+  text-align: center;
+}
+
+.kanban-root .timer-dialog-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.kanban-root .timer-dialog-close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.kanban-root .timer-dialog-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kanban-root .timer-display {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--text);
+  padding: 24px 0;
+  transition: color 0.2s ease;
+}
+
+.kanban-root .timer-display.running {
+  color: var(--green);
+}
+
+.kanban-root .timer-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.kanban-root .timer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 28px;
+  font-size: 15px;
+  font-family: var(--font);
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.kanban-root .timer-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kanban-root .timer-btn-start {
+  background: var(--green);
+  color: #fff;
+}
+
+.kanban-root .timer-btn-start:hover:not(:disabled) {
+  background: var(--green-hover);
+}
+
+.kanban-root .timer-btn-pause {
+  background: var(--red);
+  color: #fff;
+}
+
+.kanban-root .timer-btn-pause:hover:not(:disabled) {
+  background: var(--red-hover);
+}
+
+.kanban-root .timer-btn-close {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 6px 16px;
+}
+
+.kanban-root .timer-btn-close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.kanban-root .timer-dialog-footer {
+  margin-top: 8px;
 }
 
 @media (max-width: 640px) {

@@ -15,6 +15,11 @@ export interface BoardContextValue {
   editCard: (cardId: number, title: string, description: string) => Promise<void>;
   deleteCard: (cardId: number) => Promise<void>;
   moveCard: (cardId: number, targetListId: number, position: number) => Promise<void>;
+  updateCardFields: (cardId: number, fields: Record<string, unknown>) => Promise<void>;
+  startWork: (cardId: number) => Promise<void>;
+  pauseWork: (cardId: number, duration?: string) => Promise<void>;
+  heartbeatWork: (cardId: number, duration: string) => Promise<void>;
+  completeCard: (cardId: number) => Promise<void>;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

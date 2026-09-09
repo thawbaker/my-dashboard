@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { BoardContextValue } from '../context';
-import type { BoardData } from '../types';
+import type { BoardData, KanbanCard } from '../types';
 
 export function useBoardState(isAgent: boolean): BoardContextValue {
   const [board, setBoard] = useState<BoardData>([]);
@@ -90,6 +90,71 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     [refresh]
   );
 
+  const updateCardFields = useCallback(
+    async (cardId: number, fields: Record<string, unknown>) => {
+      await api('PUT', `/api/kanban/cards/${cardId}`, fields);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const startWork = useCallback(
+    async (cardId: number) => {
+      await api('POST', `/api/kanban/cards/${cardId}/work`);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const pauseWork = useCallback(
+    async (cardId: number, duration?: string) => {
+      const body: Record<string, unknown> = {};
+      if (duration) body.duration = duration;
+      const data = await api<{ card?: unknown; session?: unknown }>(
+        'POST',
+        `/api/kanban/cards/${cardId}/work/pause`,
+        body
+      );
+      if (data.card) {
+        // Merge the returned card into the board without full refresh
+        setBoard((prev) =>
+          prev.map((list) => ({
+            ...list,
+            cards: list.cards.map((c) => (c.id === cardId ? { ...c, ...(data.card as Partial<KanbanCard>) } : c)),
+          }))
+        );
+      }
+    },
+    []
+  );
+
+  const heartbeatWork = useCallback(
+    async (cardId: number, duration: string) => {
+      const data = await api<{ card?: unknown }>(
+        'POST',
+        `/api/kanban/cards/${cardId}/work`,
+        { duration }
+      );
+      if (data.card) {
+        setBoard((prev) =>
+          prev.map((list) => ({
+            ...list,
+            cards: list.cards.map((c) => (c.id === cardId ? { ...c, ...(data.card as Partial<KanbanCard>) } : c)),
+          }))
+        );
+      }
+    },
+    []
+  );
+
+  const completeCardAction = useCallback(
+    async (cardId: number) => {
+      await api('POST', `/api/kanban/cards/${cardId}/complete`);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const deleteCard = useCallback(
     async (cardId: number) => {
       await api('DELETE', `/api/kanban/cards/${cardId}`);
@@ -120,5 +185,10 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     editCard,
     deleteCard,
     moveCard,
+    updateCardFields,
+    startWork,
+    pauseWork,
+    heartbeatWork,
+    completeCard: completeCardAction,
   };
 }
