@@ -17,7 +17,7 @@ export function CardList({ list }: CardListProps) {
       data-list-id={list.id}
       onDragOver={isAgent ? undefined : onDragOver}
       onDragLeave={isAgent ? undefined : onDragLeave}
-      onDrop={isAgent ? undefined : onDrop(list.id, list.cards.length)}
+      onDrop={isAgent ? undefined : onDrop(list.id)}
     >
       {list.cards.length === 0 ? (
         <div style={{ color: 'var(--text-secondary)', fontSize: '12px', padding: '8px', textAlign: 'center' }}>
