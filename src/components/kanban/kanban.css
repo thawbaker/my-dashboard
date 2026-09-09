@@ -207,6 +207,13 @@
   opacity: 0.5;
 }
 
+.kanban-root .list-cards.drag-over {
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: var(--radius-sm);
+  outline: 2px dashed #6366f1;
+  outline-offset: -2px;
+}
+
 .kanban-root .card-title {
   font-size: 13px;
   font-weight: 500;

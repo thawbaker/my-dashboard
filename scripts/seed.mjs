@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 
 dotenv.config({ path: '.env.local' });
@@ -14,9 +14,9 @@ const dbPath = process.env.DATABASE_PATH
   ? path.resolve(process.env.DATABASE_PATH)
   : path.join(projectRoot, 'data', 'dashboard.db');
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new DatabaseSync(dbPath);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
 
 // Keep in sync with deriveUsername() in src/lib/user-db.ts
 function deriveUsername(email) {
@@ -86,9 +86,14 @@ if (appCount === 0) {
     ['Analytics', 'analytics', 'bar-chart-3'],
     ['Reports', 'reports', 'file-text'],
   ];
-  db.transaction(() => {
+  db.exec('BEGIN');
+  try {
     for (const [name, slug, icon] of apps) insert.run(name, slug, icon);
-  })();
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
   console.log(`Seeded ${apps.length} placeholder apps: ${apps.map((a) => a[0]).join(', ')}.`);
 } else {
   console.log(`Apps already present (${appCount}); skipping app seed.`);

@@ -1,7 +1,8 @@
 # my-dashboard
 
 An app-launcher dashboard with authentication. Built with Next.js 15 (App
-Router), TypeScript, better-sqlite3 (raw SQL, no ORM), and shadcn/ui.
+Router), TypeScript, Node.js's built-in `node:sqlite` (raw SQL, no ORM), and
+shadcn/ui.
 Users sign up or are provisioned by an admin, then see a launcher grid of
 applications. Admins manage users and apps; access control is a **denylist**
 plus an **admin-only** flag — every enabled, non-admin-only app is granted
@@ -15,7 +16,7 @@ created on login and self-healed on every authenticated request.
 
 - **Framework**: Next.js 15.5 (App Router, Turbopack dev)
 - **Language**: TypeScript
-- **Database**: SQLite via `better-sqlite3`, raw SQL — `db/schema.sql` is the contract
+- **Database**: SQLite via Node.js's built-in `node:sqlite` module, raw SQL — `db/schema.sql` is the contract
 - **Auth**: JWT (jose, 24 h) in an HTTP-only `auth-token` cookie; bcryptjs password hashing
 - **Validation**: zod
 - **UI**: Tailwind CSS v3 + shadcn/ui (new-york style, zinc, class-based dark mode)
@@ -24,7 +25,7 @@ created on login and self-healed on every authenticated request.
 
 ### Prerequisites
 
-- Node.js 18+ (20+ recommended)
+- Node.js 24+ (the built-in `node:sqlite` module is stable from v24)
 - `sqlite3` CLI (optional, for poking at the DB)
 
 ### Setup
@@ -225,7 +226,8 @@ board with no cross-user API surface.
 
 ### Storage
 
-SQLite via better-sqlite3 (WAL mode, `PRAGMA foreign_keys=ON`). Two layers:
+SQLite via Node.js's built-in `node:sqlite` (`DatabaseSync`, WAL mode,
+`PRAGMA foreign_keys=ON`). Two layers:
 
 - **Central**: `DATABASE_PATH` (default `./data/dashboard.db`, gitignored) —
   users, applications, permissions. The schema lives in plain SQL
@@ -242,7 +244,7 @@ SQLite via better-sqlite3 (WAL mode, `PRAGMA foreign_keys=ON`). Two layers:
 db/schema.sql                # plain-SQL schema contract
 scripts/init-db.mjs          # applies the schema (idempotent)
 scripts/seed.mjs             # first-run admin + placeholder apps
-src/lib/db.ts                # raw better-sqlite3 helpers (users, apps, denylist)
+src/lib/db.ts                # raw node:sqlite helpers (users, apps, denylist)
 src/lib/user-db.ts           # per-user SQLite DBs (user-data/<username>.db)
 src/lib/auth.ts              # JWT, cookie session, getSessionUser, requireAdmin
 src/lib/cors.ts              # same-origin default / ALLOWED_ORIGINS preflight

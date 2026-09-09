@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 // ---------------------------------------------------------------------------
 // Per-user SQLite databases.
@@ -62,8 +62,8 @@ export function ensureUserDb(username: string): string | null {
     if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
     if (existsSync(file)) return file;
 
-    const db = new Database(file);
-    db.pragma('journal_mode = WAL');
+    const db = new DatabaseSync(file);
+    db.exec('PRAGMA journal_mode = WAL');
     db.close();
     return file;
   } catch (err) {

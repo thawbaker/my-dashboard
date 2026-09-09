@@ -14,6 +14,7 @@ export function useDrag(
       dragCardId.current = cardId;
       event.currentTarget.classList.add('dragging');
       event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(cardId));
     },
     [isAgent]
   );
@@ -26,11 +27,14 @@ export function useDrag(
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    const target = event.currentTarget;
+    target.classList.add('drag-over');
   }, []);
 
   const onDrop = useCallback(
     (targetListId: number, cardCount: number) => (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
+      event.currentTarget.classList.remove('drag-over');
       if (dragCardId.current === null) return;
       moveCard(dragCardId.current, targetListId, cardCount).catch((err) =>
         onError('Move failed: ' + (err as Error).message)
@@ -39,5 +43,9 @@ export function useDrag(
     [moveCard, onError]
   );
 
-  return { onDragStart, onDragEnd, onDragOver, onDrop };
+  const onDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.currentTarget.classList.remove('drag-over');
+  }, []);
+
+  return { onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop };
 }

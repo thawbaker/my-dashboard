@@ -9,13 +9,14 @@ interface CardListProps {
 
 export function CardList({ list }: CardListProps) {
   const { isAgent, moveCard, setError } = useBoard();
-  const { onDragStart, onDragEnd, onDragOver, onDrop } = useDrag(isAgent, moveCard, setError);
+  const { onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop } = useDrag(isAgent, moveCard, setError);
 
   return (
     <div
       className="list-cards"
       data-list-id={list.id}
       onDragOver={isAgent ? undefined : onDragOver}
+      onDragLeave={isAgent ? undefined : onDragLeave}
       onDrop={isAgent ? undefined : onDrop(list.id, list.cards.length)}
     >
       {list.cards.length === 0 ? (

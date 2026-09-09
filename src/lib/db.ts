@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { deriveUsername } from '@/lib/user-db';
 
 // ---------------------------------------------------------------------------
-// Raw better-sqlite3 layer (no ORM). Schema contract: db/schema.sql
+// Raw node:sqlite layer (no ORM). Schema contract: db/schema.sql
 // ---------------------------------------------------------------------------
 
 export type Role = 'user' | 'admin';
@@ -33,17 +33,34 @@ export interface App {
   created_at: string;
 }
 
-let _db: Database.Database | null = null;
+let _db: DatabaseSync | null = null;
+
+/**
+ * BEGIN/COMMIT/ROLLBACK wrapper — node:sqlite has no transaction helper
+ * (unlike better-sqlite3's db.transaction()). Rolls back on throw.
+ */
+function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
 
 /** Lazy singleton connection. Creates ./data/ if missing (default path). */
-export function getDb(): Database.Database {
+export function getDb(): DatabaseSync {
   if (_db) return _db;
   const file = process.env.DATABASE_PATH ?? './data/dashboard.db';
   const dir = path.dirname(file);
   if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-  _db = new Database(file);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
+  _db = new DatabaseSync(file);
+  // node:sqlite has no pragma() helper — set PRAGMAs via exec.
+  _db.exec('PRAGMA journal_mode = WAL');
+  _db.exec('PRAGMA foreign_keys = ON');
   migrate(_db);
   return _db;
 }
@@ -52,7 +69,7 @@ export function getDb(): Database.Database {
  * Self-healing schema migrations for databases created before a column
  * existed. Idempotent: no-ops when the column is already present.
  */
-function migrate(db: Database.Database): void {
+function migrate(db: DatabaseSync): void {
   const appCols = db.prepare(`PRAGMA table_info(applications)`).all() as { name: string }[];
   if (!appCols.some((c) => c.name === 'admin_only')) {
     db.exec(`ALTER TABLE applications ADD COLUMN admin_only INTEGER NOT NULL DEFAULT 0`);
@@ -74,7 +91,7 @@ function migrate(db: Database.Database): void {
  * (john.doe@example.com → john.doe), deduped with a -2, -3, … suffix.
  * Idempotent: no rows touched when every user already has a username.
  */
-function backfillUsernames(db: Database.Database): void {
+function backfillUsernames(db: DatabaseSync): void {
   const taken = new Set(
     (db.prepare(`SELECT username FROM users WHERE username IS NOT NULL AND username != ''`).all() as { username: string }[])
       .map((r) => r.username.toLowerCase())
@@ -84,7 +101,7 @@ function backfillUsernames(db: Database.Database): void {
     .all() as { id: number; email: string }[];
   const update = db.prepare(`UPDATE users SET username = ? WHERE id = ?`);
   if (missing.length > 0) {
-    db.transaction(() => {
+    withTransaction(db, () => {
       for (const u of missing) {
         const base = deriveUsername(u.email);
         let candidate = base;
@@ -93,7 +110,7 @@ function backfillUsernames(db: Database.Database): void {
         taken.add(candidate.toLowerCase());
         update.run(candidate, u.id);
       }
-    })();
+    });
   }
 }
 
@@ -138,7 +155,9 @@ export function getUserById(id: number): User | null {
 }
 
 export function listUsers(): User[] {
-  return getDb().prepare(`SELECT * FROM users ORDER BY created_at, id`).all() as User[];
+  // node:sqlite rows are Record<string, SQLOutputValue>; coerce through
+  // unknown because interface types carry no implicit index signature.
+  return getDb().prepare(`SELECT * FROM users ORDER BY created_at, id`).all() as unknown as User[];
 }
 
 export function setUserDisabled(id: number, disabled: boolean): void {
@@ -164,7 +183,7 @@ export function updateUser(
   }
 ): User | null {
   const sets: string[] = [];
-  const params: Record<string, unknown> = { id };
+  const params: Record<string, SQLInputValue> = { id };
   if (patch.name !== undefined) {
     sets.push(`name = @name`);
     params.name = patch.name;
@@ -219,7 +238,7 @@ export function listApps(opts: { enabledOnly?: boolean } = {}): App[] {
   const sql = opts.enabledOnly
     ? `SELECT * FROM applications WHERE enabled = 1 ORDER BY name, id`
     : `SELECT * FROM applications ORDER BY name, id`;
-  return getDb().prepare(sql).all() as App[];
+  return getDb().prepare(sql).all() as unknown as App[];
 }
 
 export function getAppById(id: number): App | null {
@@ -262,7 +281,7 @@ export function updateApp(
   }
 ): App | null {
   const sets: string[] = [];
-  const params: Record<string, unknown> = { id };
+  const params: Record<string, SQLInputValue> = { id };
   if (patch.name !== undefined) {
     sets.push(`name = @name`);
     params.name = patch.name;
@@ -306,10 +325,10 @@ export function setBlockedAppIds(userId: number, appIds: number[]): void {
   const db = getDb();
   const del = db.prepare(`DELETE FROM user_applications WHERE user_id = ?`);
   const ins = db.prepare(`INSERT OR IGNORE INTO user_applications (user_id, app_id) VALUES (?, ?)`);
-  db.transaction((id: number) => {
-    del.run(id);
-    for (const appId of appIds) ins.run(id, appId);
-  })(userId);
+  withTransaction(db, () => {
+    del.run(userId);
+    for (const appId of appIds) ins.run(userId, appId);
+  });
 }
 
 /**

@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -17,9 +17,9 @@ const schemaPath = path.join(projectRoot, 'db', 'schema.sql');
 mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const schema = readFileSync(schemaPath, 'utf8');
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new DatabaseSync(dbPath);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
 db.exec(schema);
 db.close();
 

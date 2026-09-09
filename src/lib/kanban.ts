@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { userDbPath } from '@/lib/user-db';
 
 export interface ListRow {
@@ -37,9 +37,25 @@ export interface KanbanCardJson {
   updatedAt: string;
 }
 
-const connections = new Map<string, Database.Database>();
+const connections = new Map<string, DatabaseSync>();
 
-export function getKanbanDb(username: string): Database.Database {
+/**
+ * BEGIN/COMMIT/ROLLBACK wrapper — node:sqlite has no transaction helper
+ * (unlike better-sqlite3's db.transaction()). Rolls back on throw.
+ */
+function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export function getKanbanDb(username: string): DatabaseSync {
   const existing = connections.get(username);
   if (existing) return existing;
 
@@ -47,15 +63,16 @@ export function getKanbanDb(username: string): Database.Database {
   const dir = path.dirname(file);
   if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
 
-  const db = new Database(file);
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
+  // node:sqlite has no pragma() helper: busy_timeout becomes the constructor
+  // `timeout` option (ms); other PRAGMAs go through exec()
+  const db = new DatabaseSync(file, { timeout: 5000 });
+  db.exec('PRAGMA foreign_keys = ON');
   initKanbanSchema(db);
   connections.set(username, db);
   return db;
 }
 
-function initKanbanSchema(db: Database.Database): void {
+function initKanbanSchema(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS kanban_lists (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,25 +102,25 @@ function initKanbanSchema(db: Database.Database): void {
   if (row.n > 0) return;
 
   const insert = db.prepare(`INSERT INTO kanban_lists (title, position) VALUES (?, ?)`);
-  db.transaction(() => {
+  withTransaction(db, () => {
     insert.run('To Do', 0);
     insert.run('In Progress', 1);
     insert.run('Done', 2);
-  })();
+  });
 }
 
 export function getBoard(username: string): Array<ListRow & { cards: CardRow[] }> {
   const db = getKanbanDb(username);
   const lists = db
     .prepare(`SELECT id, title, position, created_at FROM kanban_lists ORDER BY position ASC, id ASC`)
-    .all() as ListRow[];
+    .all() as unknown as ListRow[];
   const cards = db
     .prepare(
       `SELECT id, list_id, title, description, position, created_at, updated_at
        FROM kanban_cards
        ORDER BY list_id ASC, position ASC, id ASC`
     )
-    .all() as CardRow[];
+    .all() as unknown as CardRow[];
 
   const cardsByList = new Map<number, CardRow[]>();
   for (const card of cards) {
@@ -129,7 +146,7 @@ export function createList(username: string, title: string): ListRow {
 
   return db
     .prepare(`SELECT id, title, position, created_at FROM kanban_lists WHERE id = ?`)
-    .get(Number(info.lastInsertRowid)) as ListRow;
+    .get(Number(info.lastInsertRowid)) as unknown as ListRow;
 }
 
 export function renameList(username: string, id: number, title: string): ListRow | null {
@@ -177,7 +194,7 @@ export function createCard(
        FROM kanban_cards
        WHERE id = ?`
     )
-    .get(Number(info.lastInsertRowid)) as CardRow;
+    .get(Number(info.lastInsertRowid)) as unknown as CardRow;
 }
 
 export function updateCard(
@@ -210,7 +227,7 @@ export function updateCard(
        FROM kanban_cards
        WHERE id = ?`
     )
-    .get(id) as CardRow;
+    .get(id) as unknown as CardRow;
 }
 
 export function deleteCard(username: string, id: number): boolean {
@@ -225,7 +242,7 @@ export function moveCard(
   position: number
 ): 'ok' | 'card-not-found' | 'list-not-found' {
   const db = getKanbanDb(username);
-  const tx = db.transaction(() => {
+  return withTransaction(db, () => {
     const card = db
       .prepare(`SELECT id, list_id, position FROM kanban_cards WHERE id = ?`)
       .get(id) as { id: number; list_id: number; position: number } | undefined;
@@ -281,8 +298,6 @@ export function moveCard(
 
     return 'ok' as const;
   });
-
-  return tx();
 }
 
 export function listJson(row: ListRow): KanbanListJson {
