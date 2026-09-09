@@ -1,187 +1,81 @@
-# API Routes Documentation
+# API Routes
 
-This directory contains all API endpoints for the authentication system. All routes follow REST conventions and return JSON responses.
+Next.js 15 App Router route handlers for auth, admin, and the built-in Kanban
+board.
 
-## Architecture Overview
+## Shared conventions
 
-The API is built using Next.js 15 App Router's Route Handlers, providing a modern, type-safe API layer. All authentication routes are grouped under `/api/auth/` for better organization.
+- Runtime: `nodejs`
+- Auth: JWT in the HTTP-only `auth-token` cookie
+- Session authority: every authenticated route re-checks the user in SQLite on
+  every request via `getSessionUser()`
+- CORS: same-origin by default; optional allowlist via `ALLOWED_ORIGINS`
+- Validation: zod
+- Error shape: `{ error, errorType?, errors? }`
+- Preflight: every route supports `OPTIONS`
 
-## Authentication Routes
+## Route groups
 
-### 🔐 `/api/auth/sign-up`
-**Method**: POST  
-**Purpose**: Register a new user account  
-**Authentication**: None required
+### `/api/auth/*`
 
-**Request Body**:
-```typescript
-{
-  email: string;    // Valid email address
-  password: string; // Minimum 6 characters
-  name: string;     // User's display name
-}
-```
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| POST | `/api/auth/sign-up` | Public registration `{ name, username, email, password }`; auto sign-in |
+| POST | `/api/auth/sign-in` | Sign in; disabled accounts return `403 { errorType: 'disabled' }` |
+| POST | `/api/auth/logout` | Clear the session cookie |
+| GET | `/api/auth/me` | Current `{ user, apps }`; also used by the dashboard/kanban heartbeat |
 
-**Success Response** (201):
-```json
-{
-  "user": {
-    "id": "string",
-    "email": "string",
-    "name": "string"
-  }
-}
-```
+### `/api/admin/*`
 
-**Implementation Details**:
-- Validates input using Zod schema
-- Checks for existing email to prevent duplicates
-- Hashes password with bcrypt (10 rounds)
-- Creates JWT token with a 30-minute sliding expiration (see Token Management)
-- Sets HTTP-only cookie for session (also with a 30-minute max-age)
+Admin routes call `requireAdmin()` and therefore apply live DB role/disabled
+checks on every request.
 
----
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| GET | `/api/admin/users` | List users with `appCount` and `blockedAppIds` |
+| POST | `/api/admin/users` | Create a user |
+| PATCH | `/api/admin/users/:id` | Edit user fields or disable/enable |
+| DELETE | `/api/admin/users/:id` | Delete a user and their personal DB |
+| POST | `/api/admin/users/:id/password` | Set a user's password |
+| PUT | `/api/admin/users/:id/permissions` | Replace a user's denylist |
+| GET | `/api/admin/apps` | List all apps |
+| POST | `/api/admin/apps` | Create an app |
+| PATCH | `/api/admin/apps/:id` | Edit an app |
 
-### 🔑 `/api/auth/sign-in`
-**Method**: POST  
-**Purpose**: Authenticate existing user  
-**Authentication**: None required
+### `/api/kanban/*`
 
-**Request Body**:
-```typescript
-{
-  email: string;
-  password: string;
-}
-```
+The Kanban board belongs to the **session user only**. No route accepts a user
+identifier; all reads and writes go to `user-data/<username>.db` through
+`src/lib/kanban.ts`.
 
-**Success Response** (200):
-```json
-{
-  "user": {
-    "id": "string",
-    "email": "string",
-    "name": "string"
-  }
-}
-```
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| GET | `/api/kanban` | Full board `{ lists }` |
+| POST | `/api/kanban/lists` | Create list `{ title }` |
+| PUT | `/api/kanban/lists/:id` | Rename list `{ title }` |
+| DELETE | `/api/kanban/lists/:id` | Delete list and cascade cards |
+| POST | `/api/kanban/cards` | Create card `{ listId, title, description? }` |
+| PUT | `/api/kanban/cards/:id` | Update card `{ title?, description? }` |
+| DELETE | `/api/kanban/cards/:id` | Delete card |
+| POST | `/api/kanban/cards/:id/move` | Move card `{ targetListId, position }` |
 
-**Implementation Details**:
-- Validates credentials format
-- Retrieves user from database
-- Compares password hash with bcrypt
-- Generates new JWT token
-- Updates session cookie
+## Per-user isolation
 
----
+- Central dashboard state lives in `data/dashboard.db`
+- Each user also has `user-data/<username>.db`
+- Kanban tables are namespaced inside that personal DB:
+  - `kanban_lists`
+  - `kanban_cards`
+- First access auto-applies the schema and seeds `To Do`, `In Progress`, and
+  `Done` when the board is empty
 
-### 🚪 `/api/auth/logout`
-**Method**: POST  
-**Purpose**: End user session  
-**Authentication**: Required (valid JWT)
+## Verification notes
 
-**Success Response** (200):
-```json
-{
-  "success": true
-}
-```
+Current manual verification covers:
 
-**Implementation Details**:
-- Clears the auth token cookie
-- No database interaction required
-- Immediate effect
-
----
-
-### 👤 `/api/auth/me`
-**Method**: GET  
-**Purpose**: Get current user information  
-**Authentication**: Required (valid JWT)
-
-**Success Response** (200):
-```json
-{
-  "user": {
-    "id": "string",
-    "email": "string",
-    "name": "string",
-    "createdAt": "ISO 8601 date string"
-  }
-}
-```
-
-**Implementation Details**:
-- Verifies JWT from cookie
-- Retrieves fresh user data from database
-- Returns user info without password
-
-## Error Handling
-
-All endpoints follow a consistent error response format:
-
-```json
-{
-  "error": "Error message description"
-}
-```
-
-### Common Error Responses
-
-- **400 Bad Request**: Invalid input data or validation errors
-- **401 Unauthorized**: Missing or invalid authentication token
-- **409 Conflict**: Resource already exists (e.g., email in use)
-- **500 Internal Server Error**: Unexpected server errors
-
-## Security Considerations
-
-1. **Password Security**:
-   - Never stored in plain text
-   - Hashed using bcrypt with cost factor 10
-   - Password requirements enforced via Zod validation
-
-2. **Token Management**:
-   - JWT tokens signed with secret key
-   - **30-minute sliding expiration**: each token (and its cookie) lives 30 minutes; the edge middleware re-signs any token older than 15 minutes on the next request, so active users stay logged in and an idle session expires 30 minutes after its last activity
-   - Stored in HTTP-only cookies to prevent XSS
-   - See `src/lib/token.ts` (Edge-safe token helpers) and `src/middleware.ts` (sliding renewal)
-
-3. **CORS & Headers**:
-   - Handled automatically by Next.js
-   - Additional security headers can be configured in `next.config.ts`
-
-## Development Tips
-
-1. **Testing Endpoints**:
-   ```bash
-   # Register a new user
-   curl -X POST http://localhost:3000/api/auth/sign-up \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
-   
-   # Sign in
-   curl -X POST http://localhost:3000/api/auth/sign-in \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123"}'
-   ```
-
-2. **Debugging**:
-   - Check browser DevTools Network tab for requests/responses
-   - Use `console.log` in route handlers (visible in terminal)
-   - Drizzle Studio (`npm run db:studio`) to inspect database
-
-3. **Adding New Routes**:
-   - Create a new folder under `/api/`
-   - Add `route.ts` file with named exports for HTTP methods
-   - Follow existing patterns for consistency
-
-## Future Enhancements
-
-Potential improvements to consider:
-
-- Rate limiting for authentication endpoints
-- Email verification flow
-- Password reset functionality
-- OAuth provider integration
-- Two-factor authentication
-- Refresh token mechanism
+- unauthenticated `/kanban` redirect + `/api/kanban` 401
+- default board seed for new users
+- list/card create + card move
+- separate boards for separate users
+- admin disable of the Kanban app removes the launcher tile
+- disabling a user forces `/api/kanban` back to 401 immediately

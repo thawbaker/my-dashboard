@@ -25,8 +25,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // /dashboard* — valid token
-  if (pathname.startsWith('/dashboard')) {
+  // /dashboard* and /kanban* — valid token
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/kanban')) {
     if (!payload) {
       return NextResponse.redirect(new URL('/sign-in', request.url));
     }
@@ -60,5 +60,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/sign-in', '/sign-up', '/api/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/kanban/:path*',
+    '/admin/:path*',
+    '/sign-in',
+    '/sign-up',
+    '/api/:path*',
+  ],
 };

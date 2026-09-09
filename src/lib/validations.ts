@@ -87,6 +87,32 @@ export const setUserPasswordSchema = z.object({
   password: passwordSchema,
 });
 
+export const kanbanCreateListSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(100, 'Title must be at most 100 characters'),
+});
+
+export const kanbanUpdateListSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(100, 'Title must be at most 100 characters'),
+});
+
+export const kanbanCreateCardSchema = z.object({
+  listId: z.number().int().positive(),
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters'),
+  description: z.string().max(2000, 'Description must be at most 2000 characters').optional(),
+});
+
+export const kanbanUpdateCardSchema = z
+  .object({
+    title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters').optional(),
+    description: z.string().max(2000, 'Description must be at most 2000 characters').optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
+
+export const kanbanMoveCardSchema = z.object({
+  targetListId: z.number().int().positive(),
+  position: z.number().int().min(0, 'Position must be 0 or greater'),
+});
+
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SignUpAdminUserInput = z.infer<typeof signUpAdminUserSchema>;
@@ -95,3 +121,8 @@ export type UpdateAppInput = z.infer<typeof updateAppSchema>;
 export type PermissionsInput = z.infer<typeof permissionsSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type SetUserPasswordInput = z.infer<typeof setUserPasswordSchema>;
+export type KanbanCreateListInput = z.infer<typeof kanbanCreateListSchema>;
+export type KanbanUpdateListInput = z.infer<typeof kanbanUpdateListSchema>;
+export type KanbanCreateCardInput = z.infer<typeof kanbanCreateCardSchema>;
+export type KanbanUpdateCardInput = z.infer<typeof kanbanUpdateCardSchema>;
+export type KanbanMoveCardInput = z.infer<typeof kanbanMoveCardSchema>;

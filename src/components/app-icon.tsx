@@ -9,6 +9,7 @@ import {
   Folder,
   Globe,
   Image,
+  Kanban,
   Layers,
   LayoutGrid,
   Lock,
@@ -45,6 +46,7 @@ const ICONS: Record<string, LucideIcon> = {
   layers: Layers,
   image: Image,
   code: Code,
+  kanban: Kanban,
 };
 
 /** Ordered list of available icon names (admin app picker). */
@@ -69,6 +71,7 @@ export const APP_ICON_NAMES = [
   'layers',
   'image',
   'code',
+  'kanban',
 ] as const;
 
 export function AppIcon({ name, className }: { name: string; className?: string }) {

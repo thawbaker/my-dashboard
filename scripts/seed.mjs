@@ -94,5 +94,18 @@ if (appCount === 0) {
   console.log(`Apps already present (${appCount}); skipping app seed.`);
 }
 
+// Ensure the Kanban launcher tile exists even on databases that were seeded
+// before the feature was added.
+const kanbanApp = db.prepare(`SELECT id FROM applications WHERE slug = 'kanban'`).get();
+if (!kanbanApp) {
+  db.prepare(
+    `INSERT INTO applications (name, slug, icon, url, enabled, admin_only)
+     VALUES ('Kanban', 'kanban', 'kanban', '/kanban', 1, 0)`
+  ).run();
+  console.log('Ensured Kanban app.');
+} else {
+  console.log('Kanban app already present; skipping.');
+}
+
 db.close();
 console.log('Seed complete.');

@@ -46,7 +46,7 @@ apps **if no apps exist**).
 
 Sign in at `/sign-in` with the admin credentials. Public sign-up at
 `/sign-up` always creates `role: user` accounts, which start with access to
-all enabled apps.
+all enabled apps — including the built-in **Kanban** board tile.
 
 ## Scripts
 
@@ -90,6 +90,24 @@ status — demotions and disables apply immediately).
 | GET    | `/api/admin/apps`                   | All apps (including disabled), each with `adminOnly`                |
 | POST   | `/api/admin/apps`                   | Create app `{ name, url, icon, adminOnly? }` — slug auto-kebab-cased, `409` on dup |
 | PATCH  | `/api/admin/apps/:id`               | `{ name?, url?, icon?, enabled?, adminOnly? }` — renaming recomputes the slug |
+
+### Kanban
+
+The built-in Kanban board is a first-class dashboard app mounted at `/kanban`.
+It uses the same auth model as the rest of the project: edge middleware gates
+page access, and every `/api/kanban*` route re-checks the session user in the
+DB on every request.
+
+| Method | Path                           | Description |
+| ------ | ------------------------------ | ----------- |
+| GET    | `/api/kanban`                  | `{ lists }` — full board for the current session user |
+| POST   | `/api/kanban/lists`            | `{ title }` → create a list |
+| PUT    | `/api/kanban/lists/:id`        | `{ title }` → rename a list |
+| DELETE | `/api/kanban/lists/:id`        | Delete a list and its cards |
+| POST   | `/api/kanban/cards`            | `{ listId, title, description? }` → create a card |
+| PUT    | `/api/kanban/cards/:id`        | `{ title?, description? }` → update a card |
+| DELETE | `/api/kanban/cards/:id`        | Delete a card |
+| POST   | `/api/kanban/cards/:id/move`   | `{ targetListId, position }` → move a card |
 
 ## Design decisions
 
@@ -174,6 +192,10 @@ User and app **maintenance** — i.e. everything in the central dashboard DB
 (users, applications, permissions) — stays on `dashboard.db`; every other
 application on the dashboard uses the user's own DB.
 
+Today the shipped Kanban app stores its board in that file via namespaced
+`kanban_lists` and `kanban_cards` tables, so each user gets a strictly private
+board with no cross-user API surface.
+
 - **Filename = `username`**, a unique, filesystem-safe identifier (2–32
   chars: `[a-zA-Z0-9._-]`, must start with a letter or digit). Sign-up and
   admin user creation validate it; pre-existing users had theirs derived
@@ -186,6 +208,20 @@ application on the dashboard uses the user's own DB.
   concurrently); each application manages its own tables.
 - Creation is best-effort: a failure is logged and never blocks login or an
   API request.
+
+### Kanban board app
+
+- The launcher seed now idempotently ensures an enabled `Kanban` app row with
+  slug `kanban`, icon `kanban`, and url `/kanban`, so it appears for all users
+  by default.
+- `/kanban` is a faithful React 19 port of OpenKanban's dual-mode UI:
+  standard human mode uses drag-and-drop and hover menus, while
+  `?agent=true` (or `?mode=agent`) switches to large controls, always-visible
+  forms, and explicit move dropdowns for browser agents.
+- The board CSS is scoped under `.kanban-root`, including its reset, so the
+  imported OpenKanban styling cannot leak into the surrounding dashboard.
+- A 5-minute `/api/auth/me` heartbeat keeps an idle-open kanban tab aligned
+  with the dashboard's sliding-session behavior.
 
 ### Storage
 
@@ -215,8 +251,12 @@ src/middleware.ts            # edge gate (JWT only): /dashboard, /admin, sign-in
 src/components/ui/           # shadcn/ui primitives
 src/components/admin-shell.tsx  # shared chrome for /admin* pages
 src/components/app-icon.tsx     # fixed lucide icon set + fallback
-src/app/dashboard/           # user launcher grid (+ Admin tile for admins)
-src/app/admin/               # function launcher, user mgmt, app mgmt
-src/app/api/auth/            # sign-up, sign-in, logout, me
-src/app/api/admin/{users,apps}/  # admin API (9 routes)
+src/components/kanban/        # kanban React port (hooks, components, scoped CSS)
+src/app/dashboard/            # user launcher grid (+ Admin tile for admins)
+src/app/kanban/               # kanban page wrapper
+src/app/admin/                # function launcher, user mgmt, app mgmt
+src/app/api/auth/             # sign-up, sign-in, logout, me
+src/app/api/admin/{users,apps}/   # admin API
+src/app/api/kanban/           # per-user kanban API
+src/lib/kanban.ts             # per-user kanban SQLite layer
 ```
