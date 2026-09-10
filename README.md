@@ -61,6 +61,45 @@ all enabled apps — including the built-in **Kanban** board tile.
 | `npm run db:seed` | Seed first admin + placeholder apps (no-op if exist) |
 | `npm run setup`   | `db:init && db:seed`                                 |
 
+## Screenshots
+
+### Sign-in page
+
+<img src="/ss-signin.png" width="500" alt="Sign-in page">
+
+### Kanban board
+
+<img src="/ss-kanban-board.png" width="500" alt="Kanban board with time-tracking fields">
+
+### Card edit form with time tracking
+
+The edit form exposes estimated duration (optional, HH:MM:SS), actual duration,
+and a date/time picker for start time. Completed cards display variance.
+
+<img src="/ss-kanban-edit.png" width="500" alt="Card edit form with time tracking">
+
+### Timer dialog — Start
+
+Clicking **Work** closes the edit form and opens a modal timer. Green **Start**
+begins the session. A heartbeat every 15s persists in-progress time to the
+server so page reloads are safe.
+
+<img src="/ss-timer-dialog.png" width="500" alt="Timer dialog — ready to start">
+
+### Timer running
+
+The display turns green while the timer is active. Every 15 seconds the
+elapsed time is synced to the database without ending the session.
+
+<img src="/ss-timer-running.png" width="500" alt="Timer dialog — running">
+
+### Timer paused
+
+Clicking **Pause** ends the session and saves the elapsed time to
+`actual_duration`. The card is updated immediately.
+
+<img src="/ss-timer-paused.png" width="500" alt="Timer dialog — paused">
+
 ## API
 
 All routes run on the `nodejs` runtime, validate with zod, and return
@@ -209,6 +248,46 @@ board with no cross-user API surface.
   concurrently); each application manages its own tables.
 - Creation is best-effort: a failure is logged and never blocks login or an
   API request.
+
+### Kanban time tracking
+
+The Kanban board includes built-in time tracking for tasks, stored in each
+user's personal database:
+
+- **`work_sessions`** table records every Start/Pause cycle with precise
+  `start_time`, `end_time`, and `duration` columns — no data loss on reload
+- **`kanban_cards`** gained `start_time`, `end_time`, `estimated_duration`,
+  `actual_duration`, and `completed` columns (auto-migrated on existing DBs)
+- Pressing **Work** saves the form, stamps the start time (auto-filled on
+  first use), and opens a modal timer dialog
+- **Work** on a completed card un-completes it (sets `completed = false`,
+  clears `end_time`), so you can resume work
+- The **Complete** button marks the card done, pauses any active session,
+  and records the end timestamp
+- **Variance** (`actual − estimated`) is shown only when the card is both
+  completed and has an estimated duration
+- Heartbeats every 15s persist in-progress duration to the server without
+  ending the session, enabling crash recovery
+
+| Column / Table | Purpose |
+|---|---|
+| `estimated_duration` | Optional user-entered estimate (HH:MM:SS) |
+| `actual_duration` | Accumulated sum of all work sessions |
+| `work_sessions` | Individual work intervals with start/end/duration |
+| `start_time` | When the first Work press happened (editable) |
+| `end_time` | When Complete was pressed |
+| `completed` | Whether the card is done |
+| `variance` | Auto-calculated display: `+/-(hh:mm:ss)` |
+
+### Kanban API
+
+The API has been extended with time-tracking endpoints:
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST   | `/api/kanban/cards/:id/work` | Start a work session (no body) or send a heartbeat (`{ duration }`) |
+| POST   | `/api/kanban/cards/:id/work/pause` | Pause the active session, optionally with `{ duration }` |
+| POST   | `/api/kanban/cards/:id/complete` | Mark the card done, stop any running timer |
 
 ### Kanban board app
 
