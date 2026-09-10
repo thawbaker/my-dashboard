@@ -65,18 +65,18 @@ all enabled apps — including the built-in **Kanban** board tile.
 
 ### Sign-in page
 
-<img src="/ss-signin.png" width="500" alt="Sign-in page">
+<img src="screenshots/ss-signin.png" width="500" alt="Sign-in page">
 
 ### Kanban board
 
-<img src="/ss-kanban-board.png" width="500" alt="Kanban board with time-tracking fields">
+<img src="screenshots/ss-kanban-board.png" width="500" alt="Kanban board with time-tracking fields">
 
 ### Card edit form with time tracking
 
 The edit form exposes estimated duration (optional, HH:MM:SS), actual duration,
 and a date/time picker for start time. Completed cards display variance.
 
-<img src="/ss-kanban-edit.png" width="500" alt="Card edit form with time tracking">
+<img src="screenshots/ss-kanban-edit.png" width="500" alt="Card edit form with time tracking">
 
 ### Timer dialog — Start
 
@@ -84,21 +84,21 @@ Clicking **Work** closes the edit form and opens a modal timer. Green **Start**
 begins the session. A heartbeat every 15s persists in-progress time to the
 server so page reloads are safe.
 
-<img src="/ss-timer-dialog.png" width="500" alt="Timer dialog — ready to start">
+<img src="screenshots/ss-timer-dialog.png" width="500" alt="Timer dialog — ready to start">
 
 ### Timer running
 
 The display turns green while the timer is active. Every 15 seconds the
 elapsed time is synced to the database without ending the session.
 
-<img src="/ss-timer-running.png" width="500" alt="Timer dialog — running">
+<img src="screenshots/ss-timer-running.png" width="500" alt="Timer dialog — running">
 
 ### Timer paused
 
 Clicking **Pause** ends the session and saves the elapsed time to
 `actual_duration`. The card is updated immediately.
 
-<img src="/ss-timer-paused.png" width="500" alt="Timer dialog — paused">
+<img src="screenshots/ss-timer-paused.png" width="500" alt="Timer dialog — paused">
 
 ## API
 
