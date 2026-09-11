@@ -77,7 +77,8 @@ export default function AdminAppsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    const t = setTimeout(load);
+    return () => clearTimeout(t);
   }, [load]);
 
   const handleToggle = async (app: ManagedApp) => {

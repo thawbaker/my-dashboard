@@ -137,7 +137,8 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    const t = setTimeout(load);
+    return () => clearTimeout(t);
   }, [load]);
 
   const handleToggle = async (user: ManagedUser) => {
