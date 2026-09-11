@@ -13,7 +13,8 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const t = setTimeout(() => setMounted(true));
+    return () => clearTimeout(t);
   }, []);
 
   // Placeholder keeps layout stable before hydration (avoids a

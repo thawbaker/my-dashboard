@@ -20,7 +20,8 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
   }, []);
 
   useEffect(() => {
-    refresh();
+    const t = setTimeout(refresh);
+    return () => clearTimeout(t);
   }, [refresh]);
 
   useEffect(() => {
