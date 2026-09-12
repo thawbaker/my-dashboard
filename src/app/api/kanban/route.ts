@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { cardJson, getBoard, listJson } from '@/lib/kanban';
+import { cardJson, getBoard, getCardLabels, labelJson, listJson } from '@/lib/kanban';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 
 export const runtime = 'nodejs';
@@ -19,9 +19,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const lists = getBoard(user.username).map((list) => ({
+    const board = getBoard(user.username);
+    const lists = board.map((list) => ({
       ...listJson(list),
-      cards: list.cards.map(cardJson),
+      cards: list.cards.map((card) =>
+        cardJson(card, null, getCardLabels(user.username, card.id).map(labelJson))
+      ),
     }));
 
     return NextResponse.json({ lists }, { status: 200, headers: corsHeaders(request) });

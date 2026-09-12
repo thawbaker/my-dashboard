@@ -8,6 +8,7 @@ export interface ListRow {
   title: string;
   position: number;
   created_at: string;
+  archived_at: string | null;
 }
 
 export interface CardRow {
@@ -23,6 +24,16 @@ export interface CardRow {
   estimated_duration: string | null;
   actual_duration: string | null;
   completed: number;
+  assignee: string | null;
+  archived_at: string | null;
+}
+
+export interface CardLabelRow {
+  id: number;
+  card_id: number;
+  name: string;
+  color: string;
+  created_at: string;
 }
 
 export interface WorkSessionRow {
@@ -39,6 +50,7 @@ export interface KanbanListJson {
   title: string;
   position: number;
   createdAt: string;
+  archivedAt: string | null;
 }
 
 export interface KanbanCardJson {
@@ -55,6 +67,17 @@ export interface KanbanCardJson {
   actualDuration: string | null;
   completed: boolean;
   activeSessionId: number | null;
+  assignee: string | null;
+  archivedAt: string | null;
+  labels: CardLabelJson[];
+}
+
+export interface CardLabelJson {
+  id: number;
+  cardId: number;
+  name: string;
+  color: string;
+  createdAt: string;
 }
 
 export interface WorkSessionJson {
@@ -64,6 +87,14 @@ export interface WorkSessionJson {
   endTime: string | null;
   duration: string;
   createdAt: string;
+}
+
+export interface ArchivedCardJson extends KanbanCardJson {
+  listTitle: string;
+}
+
+export interface ArchivedListJson extends KanbanListJson {
+  cardCount: number;
 }
 
 const connections = new Map<string, DatabaseSync>();
@@ -92,8 +123,6 @@ export function getKanbanDb(username: string): DatabaseSync {
   const dir = path.dirname(file);
   if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
 
-  // node:sqlite has no pragma() helper: busy_timeout becomes the constructor
-  // `timeout` option (ms); other PRAGMAs go through exec()
   const db = new DatabaseSync(file, { timeout: 5000 });
   db.exec('PRAGMA foreign_keys = ON');
   initKanbanSchema(db);
@@ -134,6 +163,14 @@ function initKanbanSchema(db: DatabaseSync): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS card_labels (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id    INTEGER NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      color      TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_kanban_lists_position
       ON kanban_lists(position, id);
 
@@ -142,6 +179,12 @@ function initKanbanSchema(db: DatabaseSync): void {
 
     CREATE INDEX IF NOT EXISTS idx_work_sessions_card
       ON work_sessions(card_id, id);
+
+    CREATE INDEX IF NOT EXISTS idx_card_labels_card
+      ON card_labels(card_id, id);
+
+    CREATE INDEX IF NOT EXISTS idx_card_labels_color
+      ON card_labels(color);
   `);
 
   // Migrate existing databases — add columns that may not exist yet
@@ -151,6 +194,8 @@ function initKanbanSchema(db: DatabaseSync): void {
     'estimated_duration TEXT',
     'actual_duration TEXT',
     'completed INTEGER NOT NULL DEFAULT 0',
+    'assignee TEXT',
+    'archived_at TEXT',
   ];
   for (const col of migrateColumns) {
     try {
@@ -159,20 +204,17 @@ function initKanbanSchema(db: DatabaseSync): void {
       // Column already exists — ignore
     }
   }
+  // Add archived_at to kanban_lists
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS work_sessions (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      card_id    INTEGER NOT NULL REFERENCES kanban_cards(id) ON DELETE CASCADE,
-      start_time TEXT NOT NULL,
-      end_time   TEXT,
-      duration   TEXT NOT NULL DEFAULT '00:00:00',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_work_sessions_card ON work_sessions(card_id, id)`);
+    const listCols = db.prepare(`PRAGMA table_info(kanban_lists)`).all() as { name: string }[];
+    if (!listCols.some((c) => c.name === 'archived_at')) {
+      db.exec(`ALTER TABLE kanban_lists ADD COLUMN archived_at TEXT`);
+    }
   } catch {
-    // Already exists
+    // ignore
   }
 
+  // Seed default columns for fresh databases
   const row = db.prepare(`SELECT COUNT(*) AS n FROM kanban_lists`).get() as { n: number };
   if (row.n > 0) return;
 
@@ -184,16 +226,25 @@ function initKanbanSchema(db: DatabaseSync): void {
   });
 }
 
+// ── Board ─────────────────────────────────────────────────────────────────────
+
 export function getBoard(username: string): Array<ListRow & { cards: CardRow[] }> {
   const db = getKanbanDb(username);
   const lists = db
-    .prepare(`SELECT id, title, position, created_at FROM kanban_lists ORDER BY position ASC, id ASC`)
-    .all() as unknown as ListRow[];
+    .prepare(
+      `SELECT id, title, position, created_at, archived_at
+       FROM kanban_lists
+       WHERE archived_at IS NULL
+       ORDER BY position ASC, id ASC`
+    )
+    .all() as unknown as (ListRow & { archived_at: string | null })[];
   const cards = db
     .prepare(
       `SELECT id, list_id, title, description, position, created_at, updated_at,
-              start_time, end_time, estimated_duration, actual_duration, completed
+              start_time, end_time, estimated_duration, actual_duration, completed,
+              assignee, archived_at
        FROM kanban_cards
+       WHERE archived_at IS NULL
        ORDER BY list_id ASC, position ASC, id ASC`
     )
     .all() as unknown as CardRow[];
@@ -211,6 +262,8 @@ export function getBoard(username: string): Array<ListRow & { cards: CardRow[] }
   }));
 }
 
+// ── Lists ────────────────────────────────────────────────────────────────────
+
 export function createList(username: string, title: string): ListRow {
   const db = getKanbanDb(username);
   const row = db.prepare(`SELECT COALESCE(MAX(position), -1) AS max_pos FROM kanban_lists`).get() as {
@@ -221,7 +274,7 @@ export function createList(username: string, title: string): ListRow {
     .run(title, row.max_pos + 1);
 
   return db
-    .prepare(`SELECT id, title, position, created_at FROM kanban_lists WHERE id = ?`)
+    .prepare(`SELECT id, title, position, created_at, archived_at FROM kanban_lists WHERE id = ?`)
     .get(Number(info.lastInsertRowid)) as unknown as ListRow;
 }
 
@@ -231,7 +284,7 @@ export function renameList(username: string, id: number, title: string): ListRow
   if (info.changes === 0) return null;
 
   return (
-    db.prepare(`SELECT id, title, position, created_at FROM kanban_lists WHERE id = ?`).get(id) ??
+    db.prepare(`SELECT id, title, position, created_at, archived_at FROM kanban_lists WHERE id = ?`).get(id) ??
     null
   ) as ListRow | null;
 }
@@ -241,11 +294,42 @@ export function deleteList(username: string, id: number): boolean {
   return info.changes > 0;
 }
 
+export function archiveList(username: string, id: number): boolean {
+  const db = getKanbanDb(username);
+  return withTransaction(db, () => {
+    const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+    db.prepare(
+      `UPDATE kanban_lists SET archived_at = ? WHERE id = ? AND archived_at IS NULL`
+    ).run(now, id);
+    db.prepare(
+      `UPDATE kanban_cards SET archived_at = ? WHERE list_id = ? AND archived_at IS NULL`
+    ).run(now, id);
+    return true;
+  });
+}
+
+export function reorderLists(username: string, orderedIds: number[]): boolean {
+  const db = getKanbanDb(username);
+  return withTransaction(db, () => {
+    let ok = true;
+    for (let i = 0; i < orderedIds.length; i++) {
+      const info = db
+        .prepare(`UPDATE kanban_lists SET position = ? WHERE id = ?`)
+        .run(i, orderedIds[i]);
+      if (info.changes === 0) ok = false;
+    }
+    return ok;
+  });
+}
+
+// ── Cards ────────────────────────────────────────────────────────────────────
+
 export function createCard(
   username: string,
   listId: number,
   title: string,
-  description = ''
+  description = '',
+  assignee: string | null = null
 ): CardRow | null {
   const db = getKanbanDb(username);
   const list = db.prepare(`SELECT id FROM kanban_lists WHERE id = ?`).get(listId) as
@@ -259,21 +343,21 @@ export function createCard(
 
   const info = db
     .prepare(`
-      INSERT INTO kanban_cards (list_id, title, description, position)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO kanban_cards (list_id, title, description, position, assignee)
+      VALUES (?, ?, ?, ?, ?)
     `)
-    .run(listId, title, description, row.max_pos + 1);
+    .run(listId, title, description, row.max_pos + 1, assignee);
 
   return db
     .prepare(
       `SELECT id, list_id, title, description, position, created_at, updated_at,
-              start_time, end_time, estimated_duration, actual_duration, completed
+              start_time, end_time, estimated_duration, actual_duration, completed,
+              assignee, archived_at
        FROM kanban_cards
        WHERE id = ?`
     )
     .get(Number(info.lastInsertRowid)) as unknown as CardRow;
 }
-
 
 export function updateCard(
   username: string,
@@ -286,13 +370,15 @@ export function updateCard(
     endTime?: string | null;
     actualDuration?: string | null;
     completed?: boolean;
+    assignee?: string | null;
   }
 ): CardRow | null {
   const db = getKanbanDb(username);
   const existing = db
     .prepare(
       `SELECT id, list_id, title, description, position, created_at, updated_at,
-              start_time, end_time, estimated_duration, actual_duration, completed
+              start_time, end_time, estimated_duration, actual_duration, completed,
+              assignee, archived_at
        FROM kanban_cards
        WHERE id = ?`
     )
@@ -306,20 +392,22 @@ export function updateCard(
   const estimatedDuration = patch.estimatedDuration !== undefined ? patch.estimatedDuration : existing.estimated_duration;
   const actualDuration = patch.actualDuration !== undefined ? patch.actualDuration : existing.actual_duration;
   const completed = patch.completed !== undefined ? (patch.completed ? 1 : 0) : existing.completed;
+  const assignee = patch.assignee !== undefined ? patch.assignee : existing.assignee;
 
   db.prepare(
     `UPDATE kanban_cards
      SET title = ?, description = ?,
          start_time = ?, end_time = ?,
          estimated_duration = ?, actual_duration = ?,
-         completed = ?, updated_at = datetime('now')
+         completed = ?, assignee = ?, updated_at = datetime('now')
      WHERE id = ?`
-  ).run(title, description, startTime, endTime, estimatedDuration, actualDuration, completed, id);
+  ).run(title, description, startTime, endTime, estimatedDuration, actualDuration, completed, assignee, id);
 
   return db
     .prepare(
       `SELECT id, list_id, title, description, position, created_at, updated_at,
-              start_time, end_time, estimated_duration, actual_duration, completed
+              start_time, end_time, estimated_duration, actual_duration, completed,
+              assignee, archived_at
        FROM kanban_cards
        WHERE id = ?`
     )
@@ -328,6 +416,15 @@ export function updateCard(
 
 export function deleteCard(username: string, id: number): boolean {
   const info = getKanbanDb(username).prepare(`DELETE FROM kanban_cards WHERE id = ?`).run(id);
+  return info.changes > 0;
+}
+
+export function archiveCard(username: string, id: number): boolean {
+  const db = getKanbanDb(username);
+  const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+  const info = db
+    .prepare(`UPDATE kanban_cards SET archived_at = ? WHERE id = ? AND archived_at IS NULL`)
+    .run(now, id);
   return info.changes > 0;
 }
 
@@ -396,16 +493,125 @@ export function moveCard(
   });
 }
 
+// ── Archive ──────────────────────────────────────────────────────────────────
+
+export function restoreArchived(username: string, id: number, kind: 'card' | 'list'): boolean {
+  const db = getKanbanDb(username);
+  if (kind === 'list') {
+    return withTransaction(db, () => {
+      db.prepare(
+        `UPDATE kanban_lists SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL`
+      ).run(id);
+      db.prepare(
+        `UPDATE kanban_cards SET archived_at = NULL WHERE list_id = ? AND archived_at IS NOT NULL`
+      ).run(id);
+      return true;
+    });
+  }
+  const info = db
+    .prepare(`UPDATE kanban_cards SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL`)
+    .run(id);
+  return info.changes > 0;
+}
+
+export function permanentlyDeleteArchived(username: string, id: number, kind: 'card' | 'list'): boolean {
+  const db = getKanbanDb(username);
+  if (kind === 'list') {
+    return withTransaction(db, () => {
+      db.prepare(`DELETE FROM kanban_cards WHERE list_id = ? AND archived_at IS NOT NULL`).run(id);
+      const info = db
+        .prepare(`DELETE FROM kanban_lists WHERE id = ? AND archived_at IS NOT NULL`)
+        .run(id);
+      return info.changes > 0;
+    });
+  }
+  const info = db
+    .prepare(`DELETE FROM kanban_cards WHERE id = ? AND archived_at IS NOT NULL`)
+    .run(id);
+  return info.changes > 0;
+}
+
+export function getArchivedItems(username: string): {
+  lists: Array<ListRow & { archived_at: string; cardCount: number }>;
+  cards: Array<CardRow & { listTitle: string }>;
+} {
+  const db = getKanbanDb(username);
+  const lists = db
+    .prepare(
+      `SELECT id, title, position, created_at, archived_at
+       FROM kanban_lists
+       WHERE archived_at IS NOT NULL
+       ORDER BY archived_at DESC`
+    )
+    .all() as unknown as (ListRow & { archived_at: string })[];
+
+  const listsWithCounts = lists.map((list) => ({
+    ...list,
+    cardCount: (db
+      .prepare(`SELECT COUNT(*) AS n FROM kanban_cards WHERE list_id = ? AND archived_at IS NOT NULL`)
+      .get(list.id) as { n: number }).n,
+  }));
+
+  const cards = db
+    .prepare(
+      `SELECT c.id, c.list_id, c.title, c.description, c.position,
+              c.created_at, c.updated_at,
+              c.start_time, c.end_time, c.estimated_duration, c.actual_duration,
+              c.completed, c.assignee, c.archived_at,
+              l.title AS listTitle
+       FROM kanban_cards c
+       LEFT JOIN kanban_lists l ON l.id = c.list_id
+       WHERE c.archived_at IS NOT NULL
+       ORDER BY c.archived_at DESC`
+    )
+    .all() as unknown as (CardRow & { listTitle: string })[];
+
+  return { lists: listsWithCounts, cards };
+}
+
+// ── Labels ───────────────────────────────────────────────────────────────────
+
+export function addLabel(
+  username: string,
+  cardId: number,
+  name: string,
+  color: string
+): CardLabelRow | null {
+  const db = getKanbanDb(username);
+  const info = db
+    .prepare(`INSERT INTO card_labels (card_id, name, color) VALUES (?, ?, ?)`)
+    .run(cardId, name, color);
+  return db
+    .prepare(`SELECT id, card_id, name, color, created_at FROM card_labels WHERE id = ?`)
+    .get(Number(info.lastInsertRowid)) as unknown as CardLabelRow | null;
+}
+
+export function removeLabel(username: string, labelId: number): boolean {
+  const info = getKanbanDb(username)
+    .prepare(`DELETE FROM card_labels WHERE id = ?`)
+    .run(labelId);
+  return info.changes > 0;
+}
+
+export function getCardLabels(username: string, cardId: number): CardLabelRow[] {
+  return getKanbanDb(username)
+    .prepare(`SELECT id, card_id, name, color, created_at FROM card_labels WHERE card_id = ? ORDER BY id ASC`)
+    .all(cardId) as unknown as CardLabelRow[];
+}
+
+// ── JSON serialization ───────────────────────────────────────────────────────
+
 export function listJson(row: ListRow): KanbanListJson {
   return {
     id: row.id,
     title: row.title,
     position: row.position,
     createdAt: row.created_at,
+    archivedAt: row.archived_at ?? null,
   };
 }
 
-export function cardJson(row: CardRow, activeSessionId: number | null = null): KanbanCardJson {
+export function cardJson(row: CardRow, activeSessionId: number | null = null, labels: CardLabelJson[] = []): KanbanCardJson {
   return {
     id: row.id,
     listId: row.list_id,
@@ -420,6 +626,19 @@ export function cardJson(row: CardRow, activeSessionId: number | null = null): K
     actualDuration: row.actual_duration ?? null,
     completed: row.completed === 1,
     activeSessionId,
+    assignee: row.assignee ?? null,
+    archivedAt: row.archived_at ?? null,
+    labels,
+  };
+}
+
+export function labelJson(row: CardLabelRow): CardLabelJson {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    name: row.name,
+    color: row.color,
+    createdAt: row.created_at,
   };
 }
 
@@ -436,9 +655,6 @@ export function workSessionJson(row: WorkSessionRow): WorkSessionJson {
 
 // ── Time-tracking helpers ────────────────────────────────────────────────────
 
-/**
- * Parse a HH:MM:SS string to total seconds. Returns 0 on null/empty/invalid.
- */
 export function hmsToSeconds(hms: string | null | undefined): number {
   if (!hms) return 0;
   const parts = hms.split(':').map(Number);
@@ -446,9 +662,6 @@ export function hmsToSeconds(hms: string | null | undefined): number {
   return parts[0] * 3600 + parts[1] * 60 + parts[2];
 }
 
-/**
- * Format total seconds as HH:MM:SS (zero-padded). Clamped to 0.
- */
 export function secondsToHms(total: number): string {
   const s = Math.max(0, Math.floor(total));
   const hh = Math.floor(s / 3600);
@@ -457,16 +670,10 @@ export function secondsToHms(total: number): string {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
-/**
- * Add two HH:MM:SS duration strings and return the sum as HH:MM:SS.
- */
 export function addDurations(a: string | null | undefined, b: string | null | undefined): string {
   return secondsToHms(hmsToSeconds(a) + hmsToSeconds(b));
 }
 
-/**
- * Subtract b from a (both HH:MM:SS). Returns signed difference as +/-HH:MM:SS.
- */
 export function diffDurations(a: string | null | undefined, b: string | null | undefined): string {
   const sDiff = hmsToSeconds(a) - hmsToSeconds(b);
   const abs = Math.abs(sDiff);
@@ -477,9 +684,6 @@ export function diffDurations(a: string | null | undefined, b: string | null | u
   return `${sign}${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
-/**
- * Get the active (non-ended) work session for a card, or null.
- */
 function getActiveSession(db: DatabaseSync, cardId: number): WorkSessionRow | null {
   const row = db
     .prepare(
@@ -492,11 +696,6 @@ function getActiveSession(db: DatabaseSync, cardId: number): WorkSessionRow | nu
   return row ?? null;
 }
 
-/**
- * Start a work session for a card. If the card has no start_time, sets it to now.
- * Returns the new session row, or null if the card doesn't exist or a session
- * is already active.
- */
 export function startWorkSession(username: string, cardId: number): WorkSessionRow | null {
   const db = getKanbanDb(username);
   return withTransaction(db, () => {
@@ -529,12 +728,6 @@ export function startWorkSession(username: string, cardId: number): WorkSessionR
   });
 }
 
-/**
- * Pause/stop the active work session. Calculates the duration from start to now
- * (or uses the provided explicit duration), updates the session, and accumulates
- * into the card's actual_duration.
- * Returns the updated session row, or null if no active session.
- */
 export function pauseWorkSession(
   username: string,
   cardId: number,
@@ -569,10 +762,6 @@ export function pauseWorkSession(
   });
 }
 
-/**
- * Update the active session's duration (heartbeat). Does NOT end the session.
- * Returns the updated session row, or null if no active session.
- */
 export function heartbeatWorkSession(
   username: string,
   cardId: number,
@@ -584,7 +773,6 @@ export function heartbeatWorkSession(
 
   db.prepare(`UPDATE work_sessions SET duration = ? WHERE id = ?`).run(duration, active.id);
 
-  // Recalculate card actual_duration: sum completed sessions + this active duration
   const allCompleted = db
     .prepare(
       `SELECT COALESCE(SUM(
@@ -608,10 +796,6 @@ export function heartbeatWorkSession(
     .get(active.id) as unknown as WorkSessionRow;
 }
 
-/**
- * Complete a card: pause any active session, set end_time, mark completed.
- * Returns the updated card row, or null if card not found.
- */
 export function completeCard(username: string, cardId: number): CardRow | null {
   const db = getKanbanDb(username);
   return withTransaction(db, () => {
@@ -626,7 +810,6 @@ export function completeCard(username: string, cardId: number): CardRow | null {
 
     const now = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
 
-    // Pause any active session first
     const active = getActiveSession(db, cardId);
     if (active) {
       const duration = calcDurationHms(active.start_time, now);
@@ -649,16 +832,14 @@ export function completeCard(username: string, cardId: number): CardRow | null {
     return db
       .prepare(
         `SELECT id, list_id, title, description, position, created_at, updated_at,
-                start_time, end_time, estimated_duration, actual_duration, completed
+                start_time, end_time, estimated_duration, actual_duration, completed,
+                assignee, archived_at
          FROM kanban_cards WHERE id = ?`
       )
       .get(cardId) as unknown as CardRow;
   });
 }
 
-/**
- * Calculate duration between two ISO-ish datetime strings in HH:MM:SS.
- */
 export function calcDurationHms(startStr: string, endStr: string): string {
   const start = new Date(startStr.replace(' ', 'T') + 'Z').getTime();
   const end = new Date(endStr.replace(' ', 'T') + 'Z').getTime();
