@@ -767,6 +767,350 @@ html.dark .kanban-root .timer-dialog {
   margin-top: 8px;
 }
 
+/* ── Labels (card chips and picker) ───────────────────────────────── */
+
+.kanban-root .card-labels {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 4px 0 2px;
+}
+
+.kanban-root .card-label-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* ── Assignee ─────────────────────────────────────────────────────── */
+
+.kanban-root .card-assignee {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 2px 0;
+}
+
+/* ── Label picker ─────────────────────────────────────────────────── */
+
+.kanban-root .label-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.kanban-root .label-picker-existing {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.kanban-root .label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.kanban-root .label-chip-remove {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.kanban-root .label-chip-remove:hover {
+  color: #fff;
+}
+
+.kanban-root .label-picker-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.kanban-root .label-picker-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+.kanban-root .label-preset-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s;
+}
+
+.kanban-root .label-preset-btn:hover {
+  border-color: var(--text);
+}
+
+.kanban-root .label-picker-custom {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ── Search/Filter bar ───────────────────────────────────────────── */
+
+.kanban-root .search-filter-bar {
+  padding: 8px 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kanban-root .search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kanban-root .search-filter-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.kanban-root .search-filter-input-wrap input {
+  min-height: 32px;
+  font-size: 13px;
+  flex: 1;
+}
+
+.kanban-root .search-filter-input-wrap svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.kanban-root .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kanban-root .filter-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.kanban-root .filter-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.kanban-root .filter-chip {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1.5px solid;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+
+.kanban-root .filter-chip-active {
+  color: #fff;
+}
+
+.kanban-root .filter-chip:hover {
+  opacity: 0.8;
+}
+
+/* ── Archive view ─────────────────────────────────────────────────── */
+
+.kanban-root .archive-view {
+  padding: 24px;
+  min-height: calc(100vh - 73px);
+}
+
+.kanban-root .archive-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kanban-root .archive-title {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kanban-root .archive-count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.kanban-root .archive-loading {
+  color: var(--text-secondary);
+  padding: 40px;
+  text-align: center;
+}
+
+.kanban-root .archive-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 220px;
+  width: min(100%, 420px);
+  margin: 0 auto;
+  padding: 32px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.kanban-root .archive-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.kanban-root .archive-empty-copy {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.kanban-root .archive-section {
+  margin-bottom: 24px;
+}
+
+.kanban-root .archive-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kanban-root .archive-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  margin-bottom: 6px;
+}
+
+.kanban-root .archive-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-root .archive-item-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.kanban-root .archive-item-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-root .archive-item-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.kanban-root .archive-item-labels {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.kanban-root .archive-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.kanban-root .archive-item-actions .btn {
+  min-height: 28px;
+}
+
+/* ── Column drag-over highlight ───────────────────────────────────── */
+
+.kanban-root .board.drag-over {
+  outline: 2px dashed #6366f1;
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+.kanban-root .list-header.dragging {
+  opacity: 0.5;
+}
+
+/* Dark mode overrides for new elements */
+
+html.dark .kanban-root .list-header .list-actions-popover {
+  background: hsl(240 3.7% 15.9%) !important;
+  border-color: hsl(240 3.7% 22%) !important;
+}
+
+html.dark .kanban-root .list-header .list-actions-popover .btn {
+  background: transparent;
+}
+
+html.dark .kanban-root .list-header .list-actions-popover .btn:hover {
+  background: hsl(240 3.7% 20%);
+}
+
+html.dark .kanban-root .filter-chip {
+  border-color: hsl(240 3.7% 22%);
+}
+
+html.dark .kanban-root .filter-chip-active {
+  border-color: transparent;
+}
+
 @media (max-width: 640px) {
   .kanban-root .toolbar {
     flex-direction: column;
@@ -780,5 +1124,19 @@ html.dark .kanban-root .timer-dialog {
 
   .kanban-root .add-list-popover {
     right: 0;
+  }
+
+  .kanban-root .search-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kanban-root .filter-group {
+    flex-wrap: wrap;
+  }
+
+  .kanban-root .archive-item {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

@@ -99,6 +99,7 @@ export const kanbanCreateCardSchema = z.object({
   listId: z.number().int().positive(),
   title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters'),
   description: z.string().max(2000, 'Description must be at most 2000 characters').optional(),
+  assignee: z.string().max(100, 'Assignee must be at most 100 characters').nullable().optional(),
 });
 
 const hmsPattern = /^[+-]?\d{2}:\d{2}:\d{2}$/;
@@ -112,12 +113,26 @@ export const kanbanUpdateCardSchema = z
     endTime: z.string().nullable().optional(),
     actualDuration: z.string().regex(hmsPattern, 'Must be HH:MM:SS format').nullable().optional(),
     completed: z.boolean().optional(),
+    assignee: z.string().max(100, 'Assignee must be at most 100 characters').nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 
 export const kanbanMoveCardSchema = z.object({
   targetListId: z.number().int().positive(),
   position: z.number().int().min(0, 'Position must be 0 or greater'),
+});
+
+export const kanbanReorderListsSchema = z.object({
+  orderedIds: z.array(z.number().int().positive()).min(1, 'At least one list id required'),
+});
+
+export const kanbanAddLabelSchema = z.object({
+  name: z.string().min(1, 'Label name is required').max(50),
+  color: z.string().min(1, 'Label color is required').max(20),
+});
+
+export const kanbanArchiveSchema = z.object({
+  kind: z.enum(['card', 'list']),
 });
 
 export type SignUpInput = z.infer<typeof signUpSchema>;
@@ -137,3 +152,5 @@ export const kanbanWorkSchema = z.object({
 
 export type KanbanUpdateCardInput = z.infer<typeof kanbanUpdateCardSchema>;
 export type KanbanMoveCardInput = z.infer<typeof kanbanMoveCardSchema>;
+export type KanbanReorderListsInput = z.infer<typeof kanbanReorderListsSchema>;
+export type KanbanAddLabelInput = z.infer<typeof kanbanAddLabelSchema>;

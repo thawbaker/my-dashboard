@@ -6,6 +6,8 @@ import {
   startWorkSession,
   heartbeatWorkSession,
   getKanbanDb,
+  getCardLabels,
+  labelJson,
 } from '@/lib/kanban';
 import type { CardRow } from '@/lib/kanban';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
@@ -76,15 +78,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const card = db
         .prepare(
           `SELECT id, list_id, title, description, position, created_at, updated_at,
-                  start_time, end_time, estimated_duration, actual_duration, completed
+                  start_time, end_time, estimated_duration, actual_duration, completed,
+                  assignee
            FROM kanban_cards WHERE id = ?`
         )
         .get(cardId) as unknown as CardRow;
 
+      const labels = getCardLabels(user.username, cardId).map(labelJson);
+
       return NextResponse.json(
         {
           session: workSessionJson(session),
-          card: cardJson(card, session.id),
+          card: cardJson(card, session.id, labels),
         },
         { status: 200, headers: corsHeaders(request) }
       );

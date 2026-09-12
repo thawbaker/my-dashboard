@@ -50,7 +50,8 @@ export async function POST(request: NextRequest) {
       user.username,
       result.data.listId,
       title,
-      result.data.description?.trim() ?? ''
+      result.data.description?.trim() ?? '',
+      result.data.assignee ?? null
     );
     if (!card) {
       return NextResponse.json(

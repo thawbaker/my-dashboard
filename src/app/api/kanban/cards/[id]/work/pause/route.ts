@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { cardJson, workSessionJson, pauseWorkSession, getKanbanDb } from '@/lib/kanban';
+import { cardJson, workSessionJson, pauseWorkSession, getKanbanDb, getCardLabels, labelJson } from '@/lib/kanban';
 import type { CardRow } from '@/lib/kanban';
 import { corsHeaders, preflightResponse } from '@/lib/cors';
 import { kanbanWorkSchema } from '@/lib/validations';
@@ -68,15 +68,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const card = db
       .prepare(
         `SELECT id, list_id, title, description, position, created_at, updated_at,
-                start_time, end_time, estimated_duration, actual_duration, completed
+                start_time, end_time, estimated_duration, actual_duration, completed,
+                assignee
          FROM kanban_cards WHERE id = ?`
       )
       .get(cardId) as unknown as CardRow;
 
+    const labels = getCardLabels(user.username, cardId).map(labelJson);
+
     return NextResponse.json(
       {
         session: workSessionJson(session),
-        card: cardJson(card),
+        card: cardJson(card, null, labels),
       },
       { status: 200, headers: corsHeaders(request) }
     );

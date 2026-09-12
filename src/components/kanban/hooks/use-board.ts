@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { BoardContextValue } from '../context';
-import type { BoardData, KanbanCard } from '../types';
+import type { BoardData, KanbanCard, ArchivedCard, ArchivedList } from '../types';
 
 export function useBoardState(isAgent: boolean): BoardContextValue {
   const [board, setBoard] = useState<BoardData>([]);
@@ -75,6 +75,22 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     [refresh]
   );
 
+  const archiveList = useCallback(
+    async (id: number) => {
+      await api('POST', `/api/kanban/lists/${id}/archive`);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const reorderLists = useCallback(
+    async (orderedIds: number[]) => {
+      await api('PUT', '/api/kanban/lists/reorder', { orderedIds });
+      await refresh();
+    },
+    [refresh]
+  );
+
   const addCard = useCallback(
     async (listId: number, title: string, description?: string) => {
       await api('POST', '/api/kanban/cards', { listId, title, description: description || '' });
@@ -99,6 +115,22 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     [refresh]
   );
 
+  const addLabel = useCallback(
+    async (cardId: number, name: string, color: string) => {
+      await api('POST', `/api/kanban/cards/${cardId}/labels`, { name, color });
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const removeLabel = useCallback(
+    async (cardId: number, labelId: number) => {
+      await api('DELETE', `/api/kanban/cards/${cardId}/labels/${labelId}`);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const startWork = useCallback(
     async (cardId: number) => {
       await api('POST', `/api/kanban/cards/${cardId}/work`);
@@ -117,7 +149,6 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
         body
       );
       if (data.card) {
-        // Merge the returned card into the board without full refresh
         setBoard((prev) =>
           prev.map((list) => ({
             ...list,
@@ -164,12 +195,40 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     [refresh]
   );
 
+  const archiveCard = useCallback(
+    async (cardId: number) => {
+      await api('POST', `/api/kanban/cards/${cardId}/archive`);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const moveCard = useCallback(
     async (cardId: number, targetListId: number, position: number) => {
       await api('POST', `/api/kanban/cards/${cardId}/move`, { targetListId, position });
       await refresh();
     },
     [refresh]
+  );
+
+  const getArchivedItems = useCallback(async () => {
+    const data = await api<{ lists: ArchivedList[]; cards: ArchivedCard[] }>('GET', '/api/kanban/archive');
+    return data;
+  }, []);
+
+  const restoreArchived = useCallback(
+    async (kind: 'card' | 'list', id: number) => {
+      await api('POST', `/api/kanban/archive/${kind}/${id}`);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const permanentlyDeleteArchived = useCallback(
+    async (kind: 'card' | 'list', id: number) => {
+      await api('DELETE', `/api/kanban/archive/${kind}/${id}`);
+    },
+    []
   );
 
   return {
@@ -182,14 +241,22 @@ export function useBoardState(isAgent: boolean): BoardContextValue {
     addList,
     renameList,
     deleteList,
+    archiveList,
+    reorderLists,
     addCard,
     editCard,
     deleteCard,
+    archiveCard,
     moveCard,
     updateCardFields,
+    addLabel,
+    removeLabel,
     startWork,
     pauseWork,
     heartbeatWork,
     completeCard: completeCardAction,
+    getArchivedItems,
+    restoreArchived,
+    permanentlyDeleteArchived,
   };
 }

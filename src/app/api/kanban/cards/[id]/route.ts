@@ -46,15 +46,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const patch: {
-      title?: string;
-      description?: string;
-      estimatedDuration?: string | null;
-      startTime?: string | null;
-      endTime?: string | null;
-      actualDuration?: string | null;
-      completed?: boolean;
-    } = {};
+    const patch: Record<string, unknown> = {};
     if (result.data.title !== undefined) {
       const title = result.data.title.trim();
       if (!title) {
@@ -86,8 +78,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (result.data.completed !== undefined) {
       patch.completed = result.data.completed;
     }
+    if (result.data.assignee !== undefined) {
+      patch.assignee = result.data.assignee;
+    }
 
-    const card = updateCard(user.username, cardId, patch);
+    const card = updateCard(user.username, cardId, patch as Parameters<typeof updateCard>[2]);
     if (!card) {
       return NextResponse.json(
         { error: 'Card not found' },

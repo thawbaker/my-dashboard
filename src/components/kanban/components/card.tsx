@@ -6,12 +6,19 @@ import { CardAgentActions } from './card-agent-actions';
 import { CardMenu } from './card-menu';
 import { ConfirmBar } from './confirm-bar';
 import { TimerDialog } from './timer-dialog';
+import { LabelPicker } from './label-picker';
 
 interface CardProps {
   card: KanbanCard;
   listId: number;
   onDragStart: (cardId: number) => (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: (event: DragEvent<HTMLDivElement>) => void;
+  /**
+   * Optional per-card onDragOver — ensures the dragover event reaches
+   * the .list-cards container when hovering directly over a draggable
+   * card. Pass cardDragOver from use-drag.
+   */
+  onCardDragOver?: (event: DragEvent<HTMLDivElement>) => void;
 }
 
 function hmsToSeconds(hms: string | null | undefined): number {
@@ -31,19 +38,17 @@ function diffDurations(a: string | null | undefined, b: string | null | undefine
   return `${sign}${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
-/** Convert SQL datetime (YYYY-MM-DD HH:MM:SS) to datetime-local value (YYYY-MM-DDTHH:MM) */
 function toDatetimeLocal(sqlDt: string | null | undefined): string {
   if (!sqlDt) return '';
-  // Accept either 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SS'
   const cleaned = sqlDt.replace(' ', 'T');
-  // datetime-local wants YYYY-MM-DDTHH:MM (no seconds)
   return cleaned.length >= 16 ? cleaned.slice(0, 16) : cleaned;
 }
 
-export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
+export function Card({ card, listId, onDragStart, onDragEnd, onCardDragOver }: CardProps) {
   const {
     isAgent,
     deleteCard,
+    archiveCard,
     setError,
     updateCardFields,
     startWork,
@@ -53,12 +58,14 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
   } = useBoard();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
   const [editTitle, setEditTitle] = useState(card.title);
   const [editDesc, setEditDesc] = useState(card.description || '');
   const [editEstimated, setEditEstimated] = useState(card.estimatedDuration || '');
   const [editActual, setEditActual] = useState(card.actualDuration || '');
   const [editStart, setEditStart] = useState(toDatetimeLocal(card.startTime));
+  const [editAssignee, setEditAssignee] = useState(card.assignee || '');
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -89,12 +96,8 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
     const normalizedAct = normalizeHms(editActual);
     if (normalizedAct !== null) {
       fields.actualDuration = normalizedAct;
-    } else if (editActual.trim() === '') {
-      // Don't clear actual_duration if empty string — that would lose accumulated time
     }
 
-    // Always send startTime — the completed guard was only needed when
-    // the field was read-only after completion. Work now un-completes.
     const trimmed = editStart.trim();
     if (trimmed) {
       const dt = trimmed.replace('T', ' ');
@@ -103,7 +106,9 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
       fields.startTime = null;
     }
 
-    // Merge any overrides (e.g. handleWork passes a computed startTime)
+    // Assignee
+    fields.assignee = editAssignee.trim() || null;
+
     if (overrides) {
       Object.assign(fields, overrides);
     }
@@ -117,6 +122,13 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
     setEditing(false);
   };
 
+  const handleArchive = () => {
+    archiveCard(card.id).catch((err) => {
+      setError((err as Error).message);
+      setConfirmArchive(false);
+    });
+  };
+
   const handleDelete = () => {
     deleteCard(card.id).catch((err) => {
       setError((err as Error).message);
@@ -125,7 +137,6 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
   };
 
   const handleWork = async () => {
-    // Build overrides: un-complete if needed, stamp start time if missing
     const overrides: Record<string, unknown> = {};
 
     if (card.completed) {
@@ -133,7 +144,6 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
       overrides.endTime = null;
     }
 
-    // If no start time set, stamp it to now
     if (!editStart.trim()) {
       const now = new Date();
       const local =
@@ -143,10 +153,7 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
       overrides.startTime = local.replace('T', ' ') + ':00';
     }
 
-    // Single save with all overrides
     await handleSave(Object.keys(overrides).length > 0 ? overrides : undefined);
-
-    // Open the timer dialog
     setTimerOpen(true);
   };
 
@@ -171,6 +178,7 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
       draggable={editing ? false : !isAgent}
       onDragStart={editing ? undefined : onDragStart(card.id)}
       onDragEnd={editing ? undefined : onDragEnd}
+      onDragOver={editing || isAgent ? undefined : onCardDragOver}
       style={isAgent && !editing ? undefined : { cursor: 'grab' }}
       data-card-id={card.id}
       data-list-id={listId}
@@ -197,7 +205,22 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
             aria-label="Card description"
           />
 
-  {/* Time tracking fields */}
+          {/* Assignee */}
+          <label htmlFor={`edit-assignee-${card.id}`}>Assignee — optional</label>
+          <input
+            id={`edit-assignee-${card.id}`}
+            type="text"
+            value={editAssignee}
+            onChange={(event) => setEditAssignee(event.target.value)}
+            placeholder="Assignee name"
+            aria-label="Assignee"
+          />
+
+          {/* Labels */}
+          <label>Labels</label>
+          <LabelPicker cardId={card.id} existingLabels={card.labels} />
+
+          {/* Time tracking fields */}
           <label htmlFor={`edit-est-${card.id}`}>Estimated Duration (HH:MM:SS) — optional</label>
           <input
             id={`edit-est-${card.id}`}
@@ -208,7 +231,6 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
             aria-label="Estimated duration"
           />
 
-          {/* Editable start time — datetime-local picker when not completed */}
           <label htmlFor={`edit-start-${card.id}`}>Start Date/Time</label>
           <input
             id={`edit-start-${card.id}`}
@@ -218,7 +240,6 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
             aria-label="Start date/time"
           />
 
-          {/* Editable actual duration */}
           <label htmlFor={`edit-actual-${card.id}`}>Actual Duration (HH:MM:SS)</label>
           <input
             id={`edit-actual-${card.id}`}
@@ -287,6 +308,27 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
               </span>
             )}
           </div>
+
+          {/* Labels */}
+          {card.labels.length > 0 && (
+            <div className="card-labels">
+              {card.labels.map((label) => (
+                <span
+                  key={label.id}
+                  className="card-label-chip"
+                  style={{ background: label.color }}
+                >
+                  {label.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Assignee */}
+          {card.assignee && (
+            <div className="card-assignee">&#128100; {card.assignee}</div>
+          )}
+
           {card.description && <div className="card-desc">{card.description}</div>}
 
           {/* Compact time info on card face */}
@@ -317,11 +359,21 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
             </div>
           )}
 
-          {confirmDelete ? (
+          {confirmArchive ? (
             <ConfirmBar
-              message="Delete this card?"
+              message="Archive this card?"
+              onConfirm={handleArchive}
+              onCancel={() => setConfirmArchive(false)}
+              confirmLabel="Archive"
+              cancelLabel="Cancel"
+            />
+          ) : confirmDelete ? (
+            <ConfirmBar
+              message="Delete permanently?"
               onConfirm={handleDelete}
               onCancel={() => setConfirmDelete(false)}
+              confirmLabel="Delete"
+              cancelLabel="Cancel"
             />
           ) : (
             <>
@@ -333,8 +385,10 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
                     setEditEstimated(card.estimatedDuration || '');
                     setEditActual(card.actualDuration || '');
                     setEditStart(toDatetimeLocal(card.startTime));
+                    setEditAssignee(card.assignee || '');
                     setEditing(true);
                   }}
+                  onArchive={() => setConfirmArchive(true)}
                   onDelete={() => setConfirmDelete(true)}
                 />
               )}
@@ -348,8 +402,10 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
                     setEditEstimated(card.estimatedDuration || '');
                     setEditActual(card.actualDuration || '');
                     setEditStart(toDatetimeLocal(card.startTime));
+                    setEditAssignee(card.assignee || '');
                     setEditing(true);
                   }}
+                  onArchive={() => setConfirmArchive(true)}
                   onDelete={() => setConfirmDelete(true)}
                 />
               )}
@@ -358,8 +414,6 @@ export function Card({ card, listId, onDragStart, onDragEnd }: CardProps) {
         </>
       )}
 
-      {/* Timer dialog renders at card root level, not inside editing block.
-          This way it stays visible even after handleSave closes the form. */}
       {timerOpen && (
         <TimerDialog
           cardId={card.id}

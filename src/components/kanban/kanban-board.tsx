@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BoardContext } from './context';
 import { useBoardState } from './hooks/use-board';
 import { Board } from './components/board';
 import { ErrorBanner } from './components/error-banner';
 import { Toolbar } from './components/toolbar';
+import { ArchiveView } from './components/archive-view';
 
 export function KanbanBoard() {
   const searchParams = useSearchParams();
@@ -14,6 +15,7 @@ export function KanbanBoard() {
     () => searchParams.has('agent') || searchParams.get('mode') === 'agent',
     [searchParams]
   );
+  const [showArchive, setShowArchive] = useState(false);
 
   useEffect(() => {
     if (isAgent) document.documentElement.setAttribute('data-agent', '');
@@ -29,8 +31,12 @@ export function KanbanBoard() {
   return (
     <BoardContext.Provider value={boardState}>
       <div className="kanban-root">
-        <Toolbar />
-        <Board />
+        <Toolbar onShowArchive={() => setShowArchive(true)} />
+        {showArchive ? (
+          <ArchiveView onClose={() => setShowArchive(false)} />
+        ) : (
+          <Board />
+        )}
         <ErrorBanner />
       </div>
     </BoardContext.Provider>

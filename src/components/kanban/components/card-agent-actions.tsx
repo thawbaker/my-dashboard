@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Archive, Pencil, Trash2 } from 'lucide-react';
 import { useBoard } from '../context';
 import type { KanbanCard } from '../types';
 
@@ -7,10 +7,11 @@ interface CardAgentActionsProps {
   card: KanbanCard;
   listId: number;
   onEdit: () => void;
+  onArchive: () => void;
   onDelete: () => void;
 }
 
-export function CardAgentActions({ card, listId, onEdit, onDelete }: CardAgentActionsProps) {
+export function CardAgentActions({ card, listId, onEdit, onArchive, onDelete }: CardAgentActionsProps) {
   const { board, moveCard, setError } = useBoard();
   const [moveValue, setMoveValue] = useState('');
   const currentList = board.find((list) => list.id === listId);
@@ -67,6 +68,9 @@ export function CardAgentActions({ card, listId, onEdit, onDelete }: CardAgentAc
       )}
       <button className="btn btn-sm" onClick={onEdit} aria-label={`Edit card ${card.title}`}>
         <Pencil size={14} /> Edit
+      </button>
+      <button className="btn btn-sm" onClick={onArchive} aria-label={`Archive card ${card.title}`}>
+        <Archive size={14} /> Archive
       </button>
       <button
         className="btn btn-sm btn-danger"
