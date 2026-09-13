@@ -1,7 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { deriveUsername } from '@/lib/user-db';
+import { deriveUsername, migrateLegacyUserDbs } from '@/lib/user-db';
 
 // ---------------------------------------------------------------------------
 // Raw node:sqlite layer (no ORM). Schema contract: db/schema.sql
@@ -62,6 +62,8 @@ export function getDb(): DatabaseSync {
   _db.exec('PRAGMA journal_mode = WAL');
   _db.exec('PRAGMA foreign_keys = ON');
   migrate(_db);
+  // One-time migration: move legacy flat-layout user DBs into subdirectories
+  migrateLegacyUserDbs();
   return _db;
 }
 

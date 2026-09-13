@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 // Per-user SQLite databases.
 //
 // Every dashboard user (and admin) owns a SQLite file at
-// `user-data/<username>.db` (directory: env USER_DATA_DIR, default
+// `user-data/<username>/<username>.db` (directory: env USER_DATA_DIR, default
 // ./user-data). The file is created on login and self-healed whenever a
 // session is resolved — applications on the dashboard (outside of user and
 // app maintenance, which stay on the central dashboard DB) use the user's
@@ -16,7 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 // reuse deriveUsername() in its migration backfill without a cycle.
 // ---------------------------------------------------------------------------
 
-/** Directory holding per-user DB files. Resolved once at module load. */
+/** Directory holding per-user DB subdirectories. Resolved once at module load. */
 export const USER_DATA_DIR: string = process.env.USER_DATA_DIR ?? './user-data';
 
 /**
@@ -37,14 +37,17 @@ export function deriveUsername(email: string): string {
 }
 
 /**
- * Absolute path of the user's DB file. Throws on unsafe usernames so a bad
- * value can never escape the user-data directory (no path traversal).
+ * Absolute path of the user's DB file, now in a per-user subdirectory:
+ *   ./user-data/<username>/<username>.db
+ *
+ * Throws on unsafe usernames so a bad value can never escape the user-data
+ * directory (no path traversal).
  */
 export function userDbPath(username: string): string {
   if (!USERNAME_PATTERN.test(username)) {
     throw new Error(`Refusing to create user DB for unsafe username: ${username}`);
   }
-  return path.join(USER_DATA_DIR, `${username}.db`);
+  return path.join(USER_DATA_DIR, username, `${username}.db`);
 }
 
 /**
@@ -80,40 +83,103 @@ function userDbFiles(username: string): string[] {
 
 /**
  * Move the user's DB file when their username changes. Best-effort: if the
- * target file already exists (another account) the move is skipped — the
- * old file keeps its data and ensureUserDb() starts a fresh one for the
- * new username. Failures are logged and never block the API request.
+ * target directory/file already exists (another account) the move is skipped
+ * — the old file keeps its data and ensureUserDb() starts a fresh one for
+ * the new username. Failures are logged and never block the API request.
  */
 export function renameUserDb(oldUsername: string, newUsername: string): void {
   if (oldUsername === newUsername) return;
   try {
+    const fromDir = path.join(USER_DATA_DIR, oldUsername);
+    const toDir = path.join(USER_DATA_DIR, newUsername);
     const from = userDbPath(oldUsername);
-    const to = userDbPath(newUsername);
+
     if (!existsSync(from)) return;
-    if (existsSync(to)) {
+    if (existsSync(userDbPath(newUsername))) {
       console.error(
-        `Cannot rename user DB '${oldUsername}' -> '${newUsername}': target already exists, old file kept`
+        `Cannot rename user DB '${oldUsername}' -> '${newUsername}': target already exists, old data kept`
       );
       return;
     }
-    for (const file of userDbFiles(oldUsername)) {
-      if (existsSync(file)) renameSync(file, to + file.slice(from.length));
+
+    // Create the target directory
+    mkdirSync(toDir, { recursive: true });
+
+    // Move all sidecar files into the new directory
+    for (const suffix of ['', '-wal', '-shm']) {
+      const src = path.join(fromDir, `${oldUsername}.db${suffix}`);
+      if (existsSync(src)) renameSync(src, path.join(toDir, `${newUsername}.db${suffix}`));
     }
+
+    // Remove the old (now-empty) directory
+    try { rmSync(fromDir, { recursive: true, force: true }); } catch { /* ignore */ }
   } catch (err) {
     console.error(`Failed to rename user DB '${oldUsername}' -> '${newUsername}':`, err);
   }
 }
 
 /**
- * Remove the user's DB file (and WAL sidecars) when the account is
- * deleted. Best-effort: logged and never blocking.
+ * Remove the user's entire data directory (DB file, WAL sidecars, and any
+ * other data the user may have accumulated) when the account is deleted.
+ * Best-effort: logged and never blocking.
  */
 export function deleteUserDb(username: string): void {
   try {
-    for (const file of userDbFiles(username)) {
-      if (existsSync(file)) unlinkSync(file);
+    const dir = path.join(USER_DATA_DIR, username);
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
     }
   } catch (err) {
     console.error(`Failed to delete user DB for '${username}':`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-time legacy migration: move DB files from the old flat layout
+//   user-data/{username}.db → user-data/{username}/{username}.db
+// ---------------------------------------------------------------------------
+
+/**
+ * Migrate any user DB files still in the flat `user-data/<username>.db`
+ * layout to the new `user-data/<username>/<username>.db` subdirectory layout.
+ *
+ * Called once at server startup (from the main db module) — idempotent and
+ * safe to call repeatedly. Best-effort: failures are logged, never crash.
+ */
+export function migrateLegacyUserDbs(): void {
+  try {
+    if (!existsSync(USER_DATA_DIR)) return;
+
+    const entries = readdirSync(USER_DATA_DIR, { withFileTypes: true });
+
+    for (const entry of entries) {
+      // Only process files named like a DB (must match username pattern)
+      if (!entry.isFile()) continue;
+      const name = entry.name;
+      // Strip known extensions: .db, .db-wal, .db-shm
+      const stem = name.replace(/\.db(-wal|-shm)?$/, '');
+      if (stem === name) continue; // no .db extension — skip
+      if (!USERNAME_PATTERN.test(stem)) continue;
+
+      const oldDir = path.join(USER_DATA_DIR, stem);
+      if (existsSync(oldDir)) {
+        // Already migrated — clean up the old flat file if it's orphaned
+        try { unlinkSync(path.join(USER_DATA_DIR, name)); } catch { /* ignore */ }
+        continue;
+      }
+
+      // Move the DB file(s) into the new subdirectory
+      const targetDir = path.join(USER_DATA_DIR, stem);
+      mkdirSync(targetDir, { recursive: true });
+
+      for (const suffix of ['', '-wal', '-shm'] as const) {
+        const flatFile = path.join(USER_DATA_DIR, `${stem}.db${suffix}`);
+        if (existsSync(flatFile)) {
+          renameSync(flatFile, path.join(targetDir, `${stem}.db${suffix}`));
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Legacy user DB migration failed:', err);
   }
 }

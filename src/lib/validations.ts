@@ -150,6 +150,11 @@ export const kanbanWorkSchema = z.object({
   duration: z.string().regex(hmsPattern, 'Must be HH:MM:SS format').optional(),
 });
 
+export const kanbanReportSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be YYYY-MM-DD format'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be YYYY-MM-DD format'),
+});
+
 export type KanbanUpdateCardInput = z.infer<typeof kanbanUpdateCardSchema>;
 export type KanbanMoveCardInput = z.infer<typeof kanbanMoveCardSchema>;
 export type KanbanReorderListsInput = z.infer<typeof kanbanReorderListsSchema>;
