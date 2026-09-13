@@ -1140,3 +1140,103 @@ html.dark .kanban-root .filter-chip-active {
     align-items: flex-start;
   }
 }
+
+/* ── Report dialog ────────────────────────────────────────────────────── */
+
+.kanban-root .report-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.kanban-root .report-dialog {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: 420px;
+  max-width: 90vw;
+  position: relative;
+}
+
+.kanban-root .report-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kanban-root .report-dialog-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.kanban-root .report-dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kanban-root .report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kanban-root .report-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.kanban-root .report-field input[type="date"] {
+  min-height: 36px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.kanban-root .report-error {
+  font-size: 13px;
+  color: #dc2626;
+  margin: 0;
+}
+
+.kanban-root .report-result {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.kanban-root .report-result p {
+  margin: 0;
+}
+
+.kanban-root .report-result code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  background: var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+html.dark .kanban-root .report-result {
+  background: hsl(240 5.9% 10%);
+}
+
+html.dark .kanban-root .report-result code {
+  background: hsl(240 3.7% 22%);
+}
