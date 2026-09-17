@@ -103,7 +103,9 @@ export function Card({ card, listId, onDragStart, onDragEnd, onCardDragOver }: C
       const dt = trimmed.replace('T', ' ');
       fields.startTime = dt.length === 16 ? dt + ':00' : dt;
     } else {
+      // Clearing start time also resets actual duration — no reference point
       fields.startTime = null;
+      fields.actualDuration = null;
     }
 
     // Assignee
