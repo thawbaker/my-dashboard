@@ -329,8 +329,6 @@ export function Card({ card, listId, onDragStart, onDragEnd, onCardDragOver }: C
             <div className="card-assignee">&#128100; {card.assignee}</div>
           )}
 
-          {card.description && <div className="card-desc">{card.description}</div>}
-
           {/* Compact time info on card face */}
           {(card.estimatedDuration || card.actualDuration) && (
             <div className="card-time-summary">
