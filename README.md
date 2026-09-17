@@ -21,6 +21,14 @@ created on login and self-healed on every authenticated request.
 - **Validation**: zod
 - **UI**: Tailwind CSS v3 + shadcn/ui (new-york style, zinc, class-based dark mode)
 
+## Screenshots
+
+| Sign-in | Kanban Board | Task Timer |
+|---------|-------------|------------|
+| ![Sign-in page](public/screenshots/login.png) | ![Kanban board](public/screenshots/kanban-board.png) | ![Task timer dialog](public/screenshots/task-timer.png) |
+
+The **sign-in** page accepts email and password (with a link to sign-up). The **kanban board** supports drag-and-drop, labels, assignees, time estimates, search/filter, and archiving. The **task timer** tracks work sessions with start/pause, 15-second heartbeats, and duration summaries.
+
 ## Getting started
 
 ### Prerequisites
