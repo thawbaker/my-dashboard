@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "node scripts/dev.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start.mjs",
     "lint": "eslint .",
     "db:init": "node scripts/init-db.mjs",
     "db:seed": "node scripts/seed.mjs",

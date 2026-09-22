@@ -2,8 +2,8 @@ import { SignJWT, jwtVerify } from 'jose';
 
 /**
  * Edge-safe session token utilities (jose only — no node: modules, no DB).
- * Shared by the Node runtime (src/lib/auth.ts) and the Edge middleware
- * (src/middleware.ts).
+ * Shared by the Node runtime (src/lib/auth.ts) and the auth proxy
+ * (src/proxy.ts).
  *
  * Session model — 30-minute sliding expiration:
  *  - every token (and its cookie) lives for exactly 30 minutes;
@@ -20,7 +20,7 @@ const key = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key-change-this-in-production',
 );
 
-/** JWT payload. `role` is in the token so the edge middleware can gate
+/** JWT payload. `role` is in the token so the auth proxy can gate
  *  /admin without touching the DB; the DB re-check in getSessionUser()
  *  stays authoritative (demotions/disables apply immediately). */
 export interface SessionPayload {

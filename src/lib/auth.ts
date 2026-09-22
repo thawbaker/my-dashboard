@@ -12,7 +12,7 @@ import {
 } from '@/lib/token';
 
 // Node-runtime session helpers. Token creation/verification lives in
-// ./token.ts (Edge-safe, shared with the middleware); cookie writes go
+// ./token.ts (Edge-safe, shared with the proxy); cookie writes go
 // through the Response object because in Next.js 15 route handlers the
 // cookies() API is read-only.
 export { createToken, verifyToken } from '@/lib/token';
@@ -84,7 +84,7 @@ export async function requireAdmin(req?: CorsRequest): Promise<AdminCheck> {
 export function setSession(response: NextResponse, token: string) {
   response.cookies.set(SESSION_COOKIE, token, {
     ...sessionCookieOptions(),
-    maxAge: SESSION_TTL_SECONDS, // 30 min — slides forward via the middleware
+    maxAge: SESSION_TTL_SECONDS, // 30 min — slides forward via the proxy
   });
 }
 

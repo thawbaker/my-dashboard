@@ -51,7 +51,7 @@ export default function DashboardPage() {
   }, [router]);
 
   // Session heartbeat: a request every 5 minutes while the tab is visible
-  // counts as activity — the middleware slides the 30-minute token forward
+  // counts as activity — the proxy slides the 30-minute token forward
   // — and detects an idle-expired session early (redirects on 401) instead
   // of waiting for the user's next click. Hidden tabs don't beat, so a
   // backgrounded dashboard still times out after 30 minutes.
@@ -84,7 +84,9 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/sign-in');
+      // Hard redirect to bypass Next.js page cache and ensure a fresh
+      // sign-in page load (client-side router.push can leave stale state).
+      window.location.href = '/sign-in';
     } catch {
       console.error('Logout failed');
     }

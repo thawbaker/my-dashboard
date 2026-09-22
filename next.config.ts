@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Trust the auth proxy's forwarded headers for correct URL generation. */
+  poweredByHeader: false,
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;

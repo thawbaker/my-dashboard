@@ -93,10 +93,7 @@ export function Card({ card, listId, onDragStart, onDragEnd, onCardDragOver }: C
     const normalizedEst = normalizeHms(editEstimated);
     fields.estimatedDuration = normalizedEst;
 
-    const normalizedAct = normalizeHms(editActual);
-    if (normalizedAct !== null) {
-      fields.actualDuration = normalizedAct;
-    }
+    fields.actualDuration = normalizeHms(editActual);
 
     const trimmed = editStart.trim();
     if (trimmed) {

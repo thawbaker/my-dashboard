@@ -10,7 +10,7 @@ export default function Home() {
 
         <div className="space-y-4">
           <Button asChild className="w-full">
-            <Link href="/sign-in">
+            <Link href="/sign-in" target="_self">
               Sign In
             </Link>
           </Button>

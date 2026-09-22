@@ -1,5 +1,16 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+/**
+ * Next.js Proxy (replaces deprecated Edge Runtime middleware.ts).
+ *
+ * Auth-gates /admin/*, /dashboard/*, /kanban/*, /sign-in, /sign-up
+ * before forwarding to the Next.js server. Uses jose-based JWT tokens
+ * — no DB, no bcrypt, only a fast JWT pre-filter.
+ *
+ * Next.js calls this function for every request handled by the proxy.
+ *
+ * Docs: https://nextjs.org/docs/app/api-reference/next-config-js/proxy
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -8,64 +19,90 @@ import {
   sessionCookieOptions,
 } from '@/lib/token';
 
-// Edge runtime: jose only — no DB, no bcrypt. This gate is a fast
-// pre-filter; the authoritative check (including the disable check)
-// happens in API routes via getSessionUser() and page data via /api/auth/me.
+/* ------------------------------------------------------------------ */
+/*  Auth pre-filter                                                    */
+/* ------------------------------------------------------------------ */
 
-export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
+/**
+ * Decide whether to allow the request, redirect, or set a renewed token.
+ *
+ * Returns one of:
+ *   - `{ allow: true }` → forward to Next.js
+ *   - `{ allow: false, redirect: <string> }` → send a redirect
+ *   - `{ allow: true, renewedToken: <string> }` → forward + attach Set-Cookie
+ */
+async function authCheck(
+  pathname: string,
+  token: string | null,
+): Promise<
+  | { allow: true; renewedToken?: string }
+  | { allow: false; redirect: string }
+> {
   const payload = token ? await verifyToken(token) : null;
 
-  // /admin* — valid token AND admin role (from JWT, see note above)
+  // /admin* — valid token AND admin role
   if (pathname.startsWith('/admin')) {
     if (!payload || payload.role !== 'admin') {
-      return NextResponse.redirect(new URL('/sign-in', request.url));
+      return { allow: false, redirect: '/sign-in' };
     }
-    return NextResponse.next();
   }
 
-  // /dashboard* and /kanban* — valid token
+  // /dashboard*, /kanban* — valid token
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/kanban')) {
     if (!payload) {
-      return NextResponse.redirect(new URL('/sign-in', request.url));
+      return { allow: false, redirect: '/sign-in' };
     }
-    return NextResponse.next();
   }
 
-  // Auth pages — send already-authenticated users to the dashboard
+  // Auth pages — redirect authenticated users to dashboard
   if (pathname === '/sign-in' || pathname === '/sign-up') {
     if (payload) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return { allow: false, redirect: '/dashboard' };
     }
   }
 
-  // Sliding 30-minute expiration: any request (page or API) carrying a
-  // token older than half its TTL gets a fresh re-sign, so active users
-  // never hit a wall while an idle session dies 30 min after its last
-  // activity. No-op (plain next()) while the token is still fresh.
+  // API routes and everything else: pass through. The authoritative DB
+  // check happens in the route handlers themselves.
+
+  // Sliding 30-minute expiration: renew if token is half its age
   if (token) {
     const renewed = await renewTokenIfStale(token);
     if (renewed) {
+      return { allow: true, renewedToken: renewed };
+    }
+  }
+
+  return { allow: true };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Proxy handler — called by Next.js per request                      */
+/* ------------------------------------------------------------------ */
+
+export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = new URL(request.url);
+  const token = request.cookies.get(SESSION_COOKIE)?.value ?? null;
+
+  try {
+    const auth = await authCheck(pathname, token);
+
+    if (!auth.allow) {
+      return NextResponse.redirect(new URL(auth.redirect, request.url));
+    }
+
+    // If the token was renewed, set the refreshed cookie on the response
+    if (auth.renewedToken) {
       const response = NextResponse.next();
-      response.cookies.set(SESSION_COOKIE, renewed, {
+      response.cookies.set(SESSION_COOKIE, auth.renewedToken, {
         ...sessionCookieOptions(),
         maxAge: SESSION_TTL_SECONDS,
       });
       return response;
     }
+
+    return NextResponse.next();
+  } catch (err) {
+    console.error('[proxy]', err);
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
-
-  return NextResponse.next();
 }
-
-export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/kanban/:path*',
-    '/admin/:path*',
-    '/sign-in',
-    '/sign-up',
-    '/api/:path*',
-  ],
-};

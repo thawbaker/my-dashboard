@@ -95,7 +95,7 @@ status — demotions and disables apply immediately).
 ### Kanban
 
 The built-in Kanban board is a first-class dashboard app mounted at `/kanban`.
-It uses the same auth model as the rest of the project: edge middleware gates
+It uses the same auth model as the rest of the project: the auth proxy gates
 page access, and every `/api/kanban*` route re-checks the session user in the
 DB on every request.
 
@@ -167,14 +167,15 @@ Consequences:
   sessions are **kept** — the JWT is id-based, not password-based — so the
   new password takes effect at the user's next sign-in.
 
-### Edge vs Node split of auth checks
+### Proxy vs Node split of auth checks
 
-- `src/middleware.ts` runs at the edge (no DB access) and gates on the JWT
-  only: `/dashboard*` requires a valid token; `/admin*` additionally requires
-  `payload.role === 'admin'` (which is why `role` is embedded in the token);
-  `/sign-in` and `/sign-up` redirect authenticated visitors to `/dashboard`.
+- `src/proxy.ts` runs as a standalone reverse proxy (no DB access) and gates
+  on the JWT only: `/dashboard*` requires a valid token; `/admin*`
+  additionally requires `payload.role === 'admin'` (which is why `role` is
+  embedded in the token); `/sign-in` and `/sign-up` redirect authenticated
+  visitors to `/dashboard`.
 - API routes are authoritative: they re-check the DB on every request, so a
-  demotion/disable takes effect immediately. The edge gate is only a fast
+  demotion/disable takes effect immediately. The proxy gate is only a fast
   redirect for page navigation.
 
 ### CORS
@@ -249,7 +250,9 @@ src/lib/user-db.ts           # per-user SQLite DBs (user-data/<username>.db)
 src/lib/auth.ts              # JWT, cookie session, getSessionUser, requireAdmin
 src/lib/cors.ts              # same-origin default / ALLOWED_ORIGINS preflight
 src/lib/validations.ts       # zod schemas
-src/middleware.ts            # edge gate (JWT only): /dashboard, /admin, sign-in/up
+src/proxy.ts                # auth proxy (JWT only): /dashboard, /admin, sign-in/up
+scripts/dev.mjs             # dev runner: Next.js + proxy concurrently
+scripts/start.mjs           # production runner: Next.js + proxy concurrently
 src/components/ui/           # shadcn/ui primitives
 src/components/admin-shell.tsx  # shared chrome for /admin* pages
 src/components/app-icon.tsx     # fixed lucide icon set + fallback
