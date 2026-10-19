@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArrowLeft, Plus, Search, FileText } from 'lucide-react';
+import { Archive, ArrowLeft, LogOut, Plus, Search, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useBoard } from '../context';
 import { ArchiveView } from './archive-view';
@@ -304,6 +304,17 @@ export function Toolbar({ onShowArchive }: ToolbarProps) {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      // Hard redirect to bypass Next.js page cache and ensure a fresh
+      // sign-in page load (client-side router.push can leave stale state).
+      window.location.href = '/sign-in';
+    } catch {
+      console.error('Logout failed');
+    }
+  };
+
   return (
     <>
       <header className="toolbar">
@@ -325,6 +336,9 @@ export function Toolbar({ onShowArchive }: ToolbarProps) {
               </button>
               <button className="btn btn-sm" onClick={onShowArchive} aria-label="View archive">
                 <Archive size={14} /> Archive
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={handleLogout} aria-label="Log out">
+                <LogOut size={14} /> Logout
               </button>
               <button className="btn btn-primary" onClick={() => setShowForm(true)} aria-label="Add new list">
                 <Plus size={16} /> Add List

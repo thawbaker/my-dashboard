@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -127,22 +128,28 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {apps.map((app) => (
-                <a
-                  key={app.id}
-                  href={app.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group rounded-lg transition-shadow hover:shadow-md"
-                >
+              {apps.map((app) => {
+                const tile = (
                   <Card className="h-full p-6 group-hover:border-ring">
                     <div className="flex flex-col items-center gap-3 text-center">
                       <AppIcon name={app.icon} className="h-8 w-8 text-muted-foreground group-hover:text-foreground" />
                       <span className="font-medium">{app.name}</span>
                     </div>
                   </Card>
-                </a>
-              ))}
+                );
+
+                // Launch in the same tab: internal routes get client-side
+                // navigation, external URLs do a plain full-page load.
+                return app.url.startsWith('/') ? (
+                  <Link key={app.id} href={app.url} className="group rounded-lg transition-shadow hover:shadow-md">
+                    {tile}
+                  </Link>
+                ) : (
+                  <a key={app.id} href={app.url} className="group rounded-lg transition-shadow hover:shadow-md">
+                    {tile}
+                  </a>
+                );
+              })}
 
               {user?.role === 'admin' && (
                 <a
